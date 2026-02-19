@@ -13,7 +13,7 @@ mongodb/imports/
 
 3. Seguir as instruções descritas em:
 
-**docs/step-by-step.md**
+**Step by Step.md**
 
 ## ⚠️ Nota
 
