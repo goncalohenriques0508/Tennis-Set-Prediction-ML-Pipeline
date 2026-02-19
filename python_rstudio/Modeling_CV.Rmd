@@ -1,0 +1,397 @@
+---
+title: "Modeling"
+Date: 2025-05-10
+Group: 6
+Elememts:
+  António Santos (123434)
+  Bernardo Alho (123431)
+  Gonçalo Henriques (123422)
+  José Alberto (121959)
+  Maria Inês (123393)
+---
+
+```{r}
+# install.packages("e1071")  # Pacote para SVM
+library(e1071)
+# install.packages("caret")
+library(caret)
+# install.packages("smotefamily")
+library(smotefamily)
+# install.packages("randomForest")
+library(randomForest)
+# install.packages("dplyr")
+library(dplyr)
+# install.packages("pROC")
+library(pROC)
+# install.packages("fastDummies")
+library(fastDummies)
+# install.packages("rpart")
+library(rpart)
+# install.packages("xgboost")
+library(xgboost)
+# install.packages("tree")
+library(tree)
+```
+
+```{r}
+df <- read.csv("atpplayers.csv")
+head(df)
+```
+
+```{r}
+# Transformar as variáveis categóricas em factores
+for(name in names(df)[1:5]){
+  df[[name]] = as.factor(df[[name]])
+}
+```
+
+
+```{r}
+summary(df)
+print("==================================")
+str(df)
+print("==================================")
+names(df)
+```
+
+```{r}
+# Eliminou-se a variável Season
+df <- df[,-5]
+```
+
+# Data Preparation
+```{r}
+# 1. Variáveis categóricas
+categorical_vars <- names(df)[1:4]
+
+# 2. Variável alvo: transformar em factor (classificação)
+df$Sets <- as.factor(df$Sets)
+
+# 3. Para SVM e XGBoost: One-Hot Encoding das variáveis categóricas usando fastDummies
+df_dummies <- dummy_cols(df,
+                         select_columns = categorical_vars,
+                         remove_selected_columns = TRUE,
+                         remove_first_dummy = TRUE) # remove primeira dummy para evitar multicolinearidade
+
+# 4. Selecionar variáveis numéricas
+numeric_vars <- c("Ages", "prize", "Rank")
+
+# 5. Escalar variáveis numéricas para SVM e XGBoost
+df_dummies[, 1] <- scales::rescale(df_dummies[, 1], c(0, 1))
+df_dummies[, 2] <- scales::rescale(df_dummies[, 2], c(0, 1))
+df_dummies[, 3] <- scales::rescale(df_dummies[, 3], c(0, 1))
+
+# 6. Para o XgBoost e o SVM necessita das variaveis numericas estandardizadas e com dummies;
+# O dataset para Decision Tree e Random Forest, nao necessita de dummies, contudo é necessario para puder aplicar o SMOTE de forma eficaz a todas as variaveis e por este motivo também se recomenda o uso de variaveis numericas estandardizadas apesar de estes modelos baseados em arvores nao necessitarem dos valores em escala
+df_final <- df_dummies[,-4]
+df_final$Sets <- df_dummies$Sets
+
+
+# Verificar cabeçalhos e estrutura
+head(df_final)
+str(df_final)
+```
+
+
+```{r}
+huberty_index <- function(accuracy, p_def){
+  cat("Índice de Huberty:",(accuracy - p_def)/(1-p_def))
+}
+```
+
+
+
+# Cross Validation Decision Tree
+```{r}
+run_manual_cv_smote <- function(data, target_var = "Sets", k = 10, seed = 42) {
+  set.seed(seed)
+  
+  folds <- createFolds(data[[target_var]], k = k, list = TRUE, returnTrain = FALSE)
+  
+  all_preds_class <- as.numeric(as.character(data[[target_var]]))
+  all_true <- data[[target_var]]
+  
+  # Para armazenar probabilidades para ROC
+  all_probs <- as.numeric(data[[target_var]])
+  
+  for(i in seq_along(folds)) {
+    cat("Fold", i, "\n")
+    
+    train_data <- data[-folds[[i]], ]
+    test_data <- data[folds[[i]], ]
+    
+    X_train <- train_data[,-ncol(data)]
+    y_train <- as.numeric(as.character(train_data[[target_var]]))
+    
+    smote_result <- SMOTE(X_train, y_train, K=5, dup_size=1)
+
+    data_balanced <- smote_result$data
+    X_balanced <- data_balanced[,-ncol(data_balanced)]
+    y_balanced <- as.factor(data_balanced$class)
+    
+    dt_model <- rpart(y_balanced ~ ., data = X_balanced, method = "class")
+    
+    preds_class <- predict(dt_model, newdata = test_data, type = "class")
+    preds_prob <- predict(dt_model, newdata = test_data, type = "prob")
+    
+    all_preds_class[folds[[i]]] <- as.numeric(as.character(preds_class))
+    all_probs[folds[[i]]] <- preds_prob[,2]
+  }
+
+  conf_mat <- confusionMatrix(as.factor(all_preds_class), all_true)
+
+  roc_obj <- roc(all_true, all_probs)
+  
+  list(confusion_matrix = conf_mat, roc = roc_obj)
+}
+
+# Exemplo de uso:
+cv_results <- run_manual_cv_smote(df_final)
+confusion_mat <- cv_results$confusion_matrix
+
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+
+plot(cv_results$roc, col = "blue", main = "Curva ROC - Decision Tree")
+auc_value <- round(cv_results$roc$auc * 100, 1)  # calcula AUC em percentagem
+
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+auc_value  # Área sob a curva (AUC)
+
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(df_final$Sets)))) # Índice de Huberty 
+```
+
+
+# Cross Validation Random Forest
+
+```{r}
+run_manual_cv_smote <- function(data, target_var = "Sets", k = 10, seed = 42) {
+  set.seed(seed)
+  
+  folds <- createFolds(data[[target_var]], k = k, list = TRUE, returnTrain = FALSE)
+  
+  all_preds_class <- as.numeric(as.character(data[[target_var]]))
+  all_true <- data[[target_var]]
+  
+  # Para armazenar probabilidades para ROC
+  all_probs <- as.numeric(data[[target_var]])
+  
+  for(i in seq_along(folds)) {
+    cat("Fold", i, "\n")
+    
+    train_data <- data[-folds[[i]], ]
+    test_data <- data[folds[[i]], ]
+    names(test_data) <-  make.names(names(test_data))
+
+    
+    X_train <- train_data[,-ncol(data)]
+    y_train <- as.numeric(as.character(train_data[[target_var]]))
+    
+    smote_result <- SMOTE(X_train, y_train, K=5, dup_size=1)
+
+    data_balanced <- smote_result$data
+    X_balanced <- data_balanced[,-ncol(data_balanced)]
+    names(X_balanced) <-  make.names(names(X_balanced))
+    y_balanced <- as.factor(data_balanced$class)
+    
+    rf_model <- randomForest(y_balanced ~ ., data = X_balanced, ntree = 100)
+    
+    preds_class <- predict(rf_model, newdata = test_data, type = "class")
+    preds_prob <- predict(rf_model, newdata = test_data, type = "prob")
+    
+    all_preds_class[folds[[i]]] <- as.numeric(as.character(preds_class))
+    all_probs[folds[[i]]] <- preds_prob[,2]
+  }
+
+  conf_mat <- confusionMatrix(as.factor(all_preds_class), all_true)
+
+  roc_obj <- roc(all_true, all_probs)
+  
+  list(confusion_matrix = conf_mat, roc = roc_obj)
+}
+
+# Exemplo de uso:
+cv_results <- run_manual_cv_smote(df_final)
+confusion_mat <- cv_results$confusion_matrix
+
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+
+plot(cv_results$roc, col = "blue", main = "Curva ROC - Random Forest")
+auc_value <- round(cv_results$roc$auc * 100, 1)  # calcula AUC em percentagem
+
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+auc_value  # Área sob a curva (AUC)
+
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(df_final$Sets)))) # Índice de Huberty 
+```
+
+
+
+# Cross Validation XgBoost
+
+```{r}
+run_manual_cv_smote <- function(data, target_var = "Sets", k = 10, seed = 42) {
+  set.seed(seed)
+  
+  folds <- createFolds(data[[target_var]], k = k, list = TRUE, returnTrain = FALSE)
+  
+  #######################################
+  all_preds <- factor(c(), levels = c("0", "1"))
+  all_true <- factor(c(), levels = c("0", "1"))
+  all_probs <- numeric(0)
+  #######################################
+  
+  for(i in seq_along(folds)) {
+    cat("Fold", i, "\n")
+    
+    train_data <- data[-folds[[i]], ]
+    test_data <- data[folds[[i]], ]
+    names(test_data) <-  make.names(names(test_data))
+
+    
+    X_train <- train_data[,-ncol(data)]
+    y_train <- as.numeric(as.character(train_data[[target_var]]))
+    
+    smote_result <- SMOTE(X_train, y_train, K=5, dup_size=1)
+
+    data_balanced <- smote_result$data
+    X_balanced <- data_balanced[,-ncol(data_balanced)]
+    names(X_balanced) <-  make.names(names(X_balanced))
+    y_balanced <- as.factor(data_balanced$class)
+    ################################## Zona de Perigo 1
+    
+    X_train_mat <- as.matrix(X_balanced)
+
+    # Garantir que X_balanced tenha as mesmas colunas que X_train
+    # X_balanced <- as.matrix(smote_df[, names(X_train)])
+    y_balanced <- ifelse(as.numeric(as.character(y_balanced)) == 2, 0, 1)
+    
+    # Dados teste
+    X_test_mat <- as.matrix(test_data[,-ncol(test_data)])
+    y_test <- ifelse(as.numeric(as.character(test_data[[target_var]])) == 2, 0, 1)
+    
+    ####################################
+    
+    
+    #################################### Zona de perigo 2
+    # Parâmetros XGBoost
+    params <- list(
+      objective = "binary:logistic",
+      eval_metric = "logloss",
+      eta = 0.3,
+      max_depth = 3,
+      subsample = 0.8,
+      colsample_bytree = 0.8
+      # scale_pos_weight = sum(y_balanced == 0) / sum(y_balanced == 1)
+    )
+    
+    dtrain <- xgb.DMatrix(data = X_train_mat, label = y_balanced)
+    dtest <- xgb.DMatrix(data = X_test_mat, label = y_test)
+    
+    xgb_model <- xgb.train(params = params, data = dtrain, nrounds = 100, verbose = 0)
+    #####################################
+    
+    ##################################### Zona de Perigo 3
+    preds_prob <- predict(xgb_model, dtest)
+    preds_class <- ifelse(preds_prob >= 0.5, 1, 0)
+    
+    all_preds <- c(all_preds, preds_class)
+    all_true <- c(all_true, factor(y_test, levels = c(0, 1)))
+    all_probs <- c(all_probs, preds_prob)
+    #####################################
+  }
+  ###################################### Zona de Perigo 4
+  print(levels(as.factor(all_preds)))
+  print(levels(all_true))
+  conf_mat <- confusionMatrix(as.factor(all_preds), all_true)
+  roc_obj <- roc(all_true, all_probs, levels = rev(levels(all_true)))
+  
+  list(confusion_matrix = conf_mat, roc = roc_obj)
+  ######################################
+}
+
+# Exemplo de uso:
+cv_results <- run_manual_cv_smote(df_final)
+confusion_mat <- cv_results$confusion_matrix
+
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+
+plot(cv_results$roc, col = "blue", main = "Curva ROC - XGB")
+auc_value <- round(cv_results$roc$auc * 100, 1)  # calcula AUC em percentagem
+
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+auc_value  # Área sob a curva (AUC)
+
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(df_final$Sets)))) # Índice de Huberty 
+
+```
+
+# Cross Validation SVM
+```{r}
+run_manual_cv_smote <- function(data, target_var = "Sets", k = 10, seed = 42) {
+  set.seed(seed)
+  
+  folds <- createFolds(data[[target_var]], k = k, list = TRUE, returnTrain = FALSE)
+  
+  all_preds_class <- as.numeric(as.character(data[[target_var]]))
+  all_true <- data[[target_var]]
+  
+  # Para armazenar probabilidades para ROC
+  all_probs <- as.numeric(data[[target_var]])
+  
+  for(i in seq_along(folds)) {
+    cat("Fold", i, "\n")
+    
+    train_data <- data[-folds[[i]], ]
+    test_data <- data[folds[[i]], ]
+    names(test_data) <-  make.names(names(test_data))
+
+    
+    X_train <- train_data[,-ncol(data)]
+    y_train <- as.numeric(as.character(train_data[[target_var]]))
+    
+    smote_result <- SMOTE(X_train, y_train, K=5, dup_size=1)
+
+    data_balanced <- smote_result$data
+    X_balanced <- data_balanced[,-ncol(data_balanced)]
+    names(X_balanced) <-  make.names(names(X_balanced))
+    y_balanced <- as.factor(data_balanced$class)
+    
+    svm_model <- svm(y_balanced ~ ., data = X_balanced, probability = TRUE)
+    
+    preds_class <- predict(svm_model, newdata = test_data, type = "class")
+    preds_prob <- predict(svm_model, newdata = test_data, type = "prob")
+    
+    all_preds_class[folds[[i]]] <- as.numeric(as.character(preds_class))
+    all_probs[folds[[i]]] <- preds_prob
+  }
+
+  conf_mat <- confusionMatrix(as.factor(all_preds_class), all_true)
+
+  roc_obj <- roc(all_true, all_probs)
+  
+  list(confusion_matrix = conf_mat, roc = roc_obj)
+}
+
+# Exemplo de uso:
+cv_results <- run_manual_cv_smote(df_final)
+confusion_mat <- cv_results$confusion_matrix
+
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+
+plot(cv_results$roc, col = "blue", main = "Curva ROC - SVM")
+auc_value <- round(cv_results$roc$auc * 100, 1)  # calcula AUC em percentagem
+
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+auc_value  # Área sob a curva (AUC)
+
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(df_final$Sets)))) # Índice de Huberty 
+```
+

@@ -1,0 +1,391 @@
+---
+title: "Modeling"
+Date: 2025-05-10
+Group: 6
+Elememts:
+  António Santos (123434)
+  Bernardo Alho (123431)
+  Gonçalo Henriques (123422)
+  José Alberto (121959)
+  Maria Inês (123393)
+---
+
+```{r}
+# install.packages("e1071")  # Pacote para SVM
+library(e1071)
+# install.packages("caret")
+library(caret)
+# install.packages("smotefamily")
+library(smotefamily)
+# install.packages("randomForest")
+library(randomForest)
+# install.packages("dplyr")
+library(dplyr)
+# install.packages("pROC")
+library(pROC)
+# install.packages("fastDummies")
+library(fastDummies)
+# install.packages("rpart")
+library(rpart)
+# install.packages("xgboost")
+library(xgboost)
+# install.packages("tree")
+library(tree)
+```
+
+```{r}
+df <- read.csv("atpplayers.csv")
+head(df)
+```
+
+```{r}
+# Transformar as variáveis categóricas em factores
+for(name in names(df)[2:4]){
+  df[[name]] = as.factor(df[[name]])
+}
+df$GameRound <- factor(df$GameRound, levels = c("Finals", "Semi-Finals", "Quarter-Finals", 
+                                                "Round of 16", "Round of 32", "Round of 64",
+                                                "3rd Round Qualifying", "2nd Round Qualifying",
+                                                "1st Round Qualifying"))
+```
+
+```{r}
+summary(df)
+print("==================================")
+str(df)
+print("==================================")
+names(df)
+```
+
+```{r}
+# Eliminou-se a variável Season
+df <- df[,-5]
+```
+
+# Data Preparation
+```{r}
+# 1. Variáveis categóricas
+categorical_vars <- names(df)[1:4]
+
+# 2. Variável alvo: transformar em factor (classificação)
+df$Sets <- as.factor(df$Sets)
+
+# 3. Para SVM e XGBoost: One-Hot Encoding das variáveis categóricas usando fastDummies
+df_dummies <- dummy_cols(df,
+                         select_columns = categorical_vars,
+                         remove_selected_columns = TRUE,
+                         remove_first_dummy = TRUE) # remove primeira dummy para evitar multicolinearidade
+head(df_dummies)
+
+# 4. Selecionar variáveis numéricas
+numeric_vars <- c("Ages", "prize", "Rank")
+
+# 5. Escalar variáveis numéricas para SVM e XGBoost
+df_dummies[, 1] <- scales::rescale(df_dummies[, 1], c(0, 1))
+df_dummies[, 2] <- scales::rescale(df_dummies[, 2], c(0, 1))
+df_dummies[, 3] <- scales::rescale(df_dummies[, 3], c(0, 1))
+
+# 6. Para o XgBoost e o SVM necessita das variaveis numericas estandardizadas e com dummies;
+# O dataset para Decision Tree e Random Forest, nao necessita de dummies, contudo é necessario para puder aplicar o SMOTE de forma eficaz a todas as variaveis e por este motivo também se recomenda o uso de variaveis numericas estandardizadas apesar de estes modelos baseados em arvores nao necessitarem dos valores em escala
+
+df_final <- df_dummies[,-4]
+df_final$Sets <- df_dummies$Sets
+
+
+# Verificar cabeçalhos e estrutura
+head(df_final)
+str(df_final)
+```
+
+```{r}
+names(df_final) <- make.names(names(df_final))
+names(df_final)
+```
+
+
+# Train-Test Sample
+
+```{r}
+set.seed(777)
+ind_train <- sample(nrow(df),.70*nrow(df))
+x_train <- df_final[ind_train,-ncol(df_final)]
+y_train <- df_final[ind_train, ncol(df_final)]
+
+str(y_train)
+dim(x_train)
+
+x_test <- df_final[-ind_train,-ncol(df_final)]
+y_test <- df_final[-ind_train,ncol(df_final)]
+
+str(y_test)
+dim(x_test)
+```
+
+
+# Apicar a técnica Smote para balanceamento 
+
+```{r}
+X <- x_train
+y <- as.numeric(ifelse(y_train == 3, 1, 0))
+smote_result <- SMOTE(X, y, K = 5, dup_size = 1)  # dup_size=1 → 100% oversampling da minoria
+
+balanced_data <- smote_result$data
+balanced_data$target <- as.factor(balanced_data$class)
+balanced_data$class <- NULL  # remove a coluna extra
+```
+
+```{r}
+prop.table(table(y_train))
+```
+
+```{r}
+prop.table(table(ifelse(balanced_data$target == 1, 3, 2)))
+```
+
+```{r}
+huberty_index <- function(accuracy, p_def){
+  cat("Índice de Huberty:",(accuracy - p_def)/(1-p_def))
+}
+```
+
+
+# Decision Tree Model
+
+```{r}
+names(df)
+```
+
+```{r}
+ctree_large.atp<-tree(target ~ . ,data=balanced_data, control=tree.control(nrow(balanced_data), mincut = 1, minsize = 2, mindev = 0.001), split = "deviance") 
+summary (ctree_large.atp)
+```
+
+```{r}
+seq_ctree.atp <- prune.tree(ctree_large.atp ) 
+plot(seq_ctree.atp$size,seq_ctree.atp$dev,pch =20) 
+lines(seq_ctree.atp$size,seq_ctree.atp$dev, col = "red")
+```
+
+```{r}
+ctree.atp<-prune.tree(ctree_large.atp, best=18) 
+summary(ctree.atp)
+```
+
+```{r}
+ctree.atp
+```
+
+```{r}
+plot(ctree.atp, type="uniform") 
+text(ctree.atp, pretty =0,cex=0.8) 
+title(main = "Pruned Classification Tree for Number of Sets")
+```
+
+```{r}
+probs.ctree.atp<-predict(ctree.atp, x_test, type="vector")# the default type 
+head(probs.ctree.atp)
+```
+
+```{r}
+truth <- ifelse(y_test == 2, 1, 0)
+predicted_probs <- probs.ctree.atp[,1]
+
+roc_obj <- roc(truth, predicted_probs)
+auc_value <- round(as.numeric(roc_obj$auc) * 100, 2)  # Área sob a curva (AUC)
+plot(roc_obj, col = "blue", main = "Curva ROC - Decision Tree")
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+
+```
+
+```{r}
+probs.ctree.atp <- predict(ctree.atp, x_test, type="class")# the default type 
+head(probs.ctree.atp)
+confusion_mat <- confusionMatrix(table(y_test, ifelse(probs.ctree.atp== 1, 3, 2)))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(y_test)))) # Índice de Huberty 
+```
+
+```{r}
+probs.ctree.atp <- predict(ctree.atp, x_train, type="class")# the default type 
+head(probs.ctree.atp)
+confusion_mat <- confusionMatrix(table(y, probs.ctree.atp))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+```
+
+
+
+# Random Forest Model
+
+```{r}
+set.seed(777) # para reprodutibilidade
+
+# treinar modelo Random Forest
+rf_model <- randomForest(target ~ ., data = balanced_data, ntree = 100, mtry = sqrt(ncol(x_train)), importance = TRUE)
+```
+
+```{r}
+probs.rf.atp <- predict(rf_model, x_test, type="prob")# the default type 
+```
+
+```{r}
+truth <- ifelse(y_test == 2, 1, 0)
+predicted_probs <- probs.rf.atp[,1]
+
+roc_obj <- roc(truth, predicted_probs)
+auc_value <- round(as.numeric(roc_obj$auc) * 100, 2)  # Área sob a curva (AUC)
+plot(roc_obj, col = "blue", main = "Curva ROC - Random Forest")
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+```
+
+```{r}
+probs.rf.atp <- predict(rf_model, x_test, type="class")# the default type 
+head(probs.rf.atp)
+confusion_mat <- confusionMatrix(table(ifelse(y_test == 3, 1, 0), probs.rf.atp))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(y_test)))) # Índice de Huberty 
+```
+
+```{r}
+probs.rf.atp <- predict(rf_model, x_train, type="class")# the default type 
+head(probs.rf.atp)
+confusion_mat <- confusionMatrix(table(ifelse(y_train == 3, 1, 0), probs.rf.atp))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+```
+
+
+
+# Gradient Boosting Model [XGboost]
+
+```{r}
+# 📌 Divide os dados em treino e teste (80% treino, 20% teste)
+set.seed(777)  # Para reprodutibilidade
+
+train <- x_train
+train$Sets <- ifelse(y_train == 3, 1, 0)
+
+# 📌 Converte os dados em formato de matriz para o XGBoost
+train_matrix <- xgb.DMatrix(data = as.matrix(train[,-ncol(train)]), label = train$Sets)
+test_matrix  <- xgb.DMatrix(data = as.matrix(x_test), label = ifelse(y_test == 3, 1, 0))
+
+# 📌 Define os parâmetros do modelo XGBoost para classificação binária
+params <- list(
+  objective = "binary:logistic",  # Para classificação binária
+  eval_metric = "logloss",  # Métrica de erro logarítmico
+  eta = 0.3,  # Taxa de aprendizado
+  max_depth = 3,  # Profundidade da árvore
+  subsample = 0.8,  # Amostragem aleatória de observações
+  colsample_bytree = 0.8,  # Amostragem aleatória de variáveis
+  scale_pos_weight = sum(train$Sets == 0) / sum(train$Sets == 1)  # Ajusta o peso da classe minoritária
+)
+
+# 📌 Treina o modelo
+xgb_model <- xgb.train(
+  params = params,
+  data = train_matrix,
+  nrounds = 100,  # Número de iterações
+  watchlist = list(train = train_matrix, test = test_matrix),
+  verbose = 0  # Remove logs de treinamento
+)
+
+# 📌 Importância das variáveis
+importance_matrix <- xgb.importance(model = xgb_model)
+xgb.plot.importance(importance_matrix)
+```
+
+```{r}
+probs.xgb.atp <- predict(xgb_model, test_matrix, type="prob")
+```
+
+```{r}
+truth <- ifelse(y_test == 2, 1, 0)
+predicted_probs <- probs.xgb.atp
+
+roc_obj <- roc(truth, predicted_probs)
+auc_value <- round(as.numeric(roc_obj$auc) * 100, 2)  # Área sob a curva (AUC)
+plot(roc_obj, col = "blue", main = "Curva ROC - XGB")
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+```
+
+```{r}
+probs.xgb.atp <- predict(xgb_model, test_matrix, type="class")# the default type 
+head(probs.xgb.atp)
+confusion_mat <- confusionMatrix(table(ifelse(y_test == 3, 1, 0), ifelse(probs.xgb.atp >= 0.5, 1, 0)))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(y_test)))) # Índice de Huberty 
+```
+
+```{r}
+probs.xgb.atp <- predict(xgb_model, train_matrix, type="class")# the default type 
+head(probs.xgb.atp)
+confusion_mat <- confusionMatrix(table(ifelse(y_train == 3, 1, 0), ifelse(probs.xgb.atp >= 0.5, 1, 0)))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+```
+
+
+
+# SVM (Support Vetor Machine)
+
+```{r}
+# 📌 Instala e carrega os pacotes necessários
+# install.packages("e1071")  # Pacote para SVM
+library(e1071)
+```
+
+```{r}
+
+# 📌 Treina o modelo SVM com Kernel RBF
+svm_model <- svm(Sets ~ .,  # Variável alvo vs. todas as preditoras
+                 data = train, 
+                 probability = T,
+                 type = "C-classification",  # Classificação
+                 kernel = "radial",  # Kernel RBF
+                 cost = 1,  # Custo da margem do SVM
+                 gamma = 0.1)  # Parâmetro do kernel RBF
+```
+
+```{r}
+probs.svm.atp <- predict(svm_model, x_test, probability = T)
+# probs.svm.atp
+```
+
+```{r}
+truth <- ifelse(y_test == 2, 1, 0)
+predicted_probs <- attr(probs.svm.atp, "probabilities")
+
+roc_obj <- roc(truth, predicted_probs[,1])
+auc_value <- round(as.numeric(roc_obj$auc) * 100, 2)  # Área sob a curva (AUC)
+plot(roc_obj, col = "blue", main = "Curva ROC - SVM")
+legend("bottomright", legend = paste("AUC -", auc_value), col = "blue", lwd = 2, bty = "n", cex = 1.2)
+```
+
+```{r}
+probs.svm.atp <- predict(svm_model, x_test, type="class")# the default type 
+head(probs.xgb.atp)
+confusion_mat <- confusionMatrix(table(y_test, ifelse(probs.svm.atp == 1, 3, 2)))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+huberty_index(as.numeric(confusion_mat$overall[1]), max(prop.table(table(y_test)))) # Índice de Huberty 
+```
+
+```{r}
+probs.svm.atp <- predict(svm_model, x_train, type="class")# the default type 
+head(probs.xgb.atp)
+confusion_mat <- confusionMatrix(table(y_train, ifelse(probs.svm.atp == 1, 3, 2)))
+confusion_mat$table
+confusion_mat$overall[1]
+confusion_mat$byClass[1:7]
+```
