@@ -1,0 +1,11 @@
+mongoexport --db atpplayers --collection Tournaments --type=csv --fieldFile ".\Colunas\Tournaments.txt" --out ".\Tournaments.csv"
+
+mongoexport --db atpplayers --collection Players --type=csv --fieldFile ".\Colunas\Players.txt" --out ".\Players.csv"
+
+mongoexport --db atpplayers --collection Season --type=csv --fieldFile ".\Colunas\Season.txt" --out ".\Season.csv"
+
+mongoexport --db atpplayers --collection Game --type=csv --fieldFile ".\Colunas\Game.txt" --out ".\Game.csv"
+
+mongoexport --db atpplayers --collection Grounds --type=csv --fieldFile ".\Colunas\Grounds.txt" --out ".\Grounds.csv"
+
+mongoexport --db atpplayers --collection Rounds --type=csv --fieldFile ".\Colunas\Rounds.txt" --out ".\Rounds.csv"

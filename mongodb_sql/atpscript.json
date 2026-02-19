@@ -1,0 +1,1402 @@
+use atpplayers 
+
+
+// Comando para atualizar os registos (torneios) sem a variável "ground" para "Unknown"
+
+db.atp.updateMany({Ground:""}, {$set: {Ground: "Unknown"}})
+// output: matchedCount = modifiedCount = 191
+
+
+// Comando para criar a collection com os nomes de torneios diferentes existentes
+
+db.atp.aggregate([ 
+	{ $group: { _id: "$Tournament" } }, 
+	{ $project: { Name: "$_id", _id: 0 } }, 
+	{ $merge: "Tournaments" }
+])
+// valores exportados : 5340 (db.Tournaments.countDocuments())
+
+
+// Comando para criar uma collection com os rounds existentes na collection atp
+
+db.atp.aggregate([ 
+	{ $group: { _id: "$GameRound" } }, 
+	{ $project: { Round: "$_id", _id: 0 } }, 
+	{ $merge: "Rounds" } 
+])
+// valores exportados : 13 (db.Rounds.countDocuments())
+
+
+// Comando para criar uma collection com todos os Grounds existentes na bd
+
+db.atp.aggregate([
+	{$group: {_id:"$Ground" } },
+	{$project: {Ground:"$_id", _id:0} },
+	{$merge: "Grounds" }
+])
+// valores exportados : 5 (db.Grounds.countDocuments())
+
+
+// Comando para criar a collection “atp2” com algumas colunas já tratadas, nomeadamente:
+// location e born só terão a ultima posição deste campo a seguir a virgula (sendo pais/cidade); Date será separado e irá formar o Start e o End;
+// apenas considerando os registos que começam com A$ e “” em Prize.
+
+db.atp.aggregate([ 
+	{$match: { $or: [{ Prize: "" }, { Prize: { $regex: "^A" } }] } }, 
+	{$project: 
+		{
+			PlayerName: 1, 
+			Born: 
+				{$arrayElemAt: 
+					[{$split:[ { $arrayElemAt: [{ $split: ["$Born", ", "] }, -1] }, "," ]}, -1] // existem campos com ", " ou "," mas independentemente foi retirada a ultima posiçao
+				}, 
+			Height: 1, 
+			Hand: 1, 
+			LinkPlayer: 1, Tournament: 1, 
+			Location: 
+				{$arrayElemAt: 
+					[{ $split: ["$Location", ", "] }, -1] 
+				}, 
+			Start: 
+				{ $arrayElemAt: 
+					[{ $split: ["$Date", " - "] }, 0] 
+				}, 
+			End: 
+				{ $arrayElemAt: 
+					[{ $split: ["$Date", " - "] }, -1] 
+				}, 
+			Ground: 1, 
+			Prize: 1, 
+			GameRound: 1, 
+			GameRank: 1, 
+			Oponent: 1, 
+			WL: 1, 
+			Score: 1 
+		} 
+	}, 
+	{$merge:"atp2"}
+])
+// valores exportados para atp2 até o momento: 26483 (db.atp2.countDocuments())
+
+
+// Adicionando os tratados $ e ? já tratados
+
+db.atp.aggregate([ 
+	{$match: 
+		{$and: 
+			[
+				{Prize: {$regex: "$"}}, 
+				{Prize: {$ne: ""}}, 
+				{$nor: [{Prize: {$regex: "^A"}}]}
+			] 
+		} 
+	},
+	{$project: 
+		{
+			PlayerName: 1, 
+			Born: 
+				{$arrayElemAt: 
+					[{$split:[ { $arrayElemAt: [{ $split: ["$Born", ", "] }, -1] }, "," ]},-1] 
+				}, 
+			Height: 1, 
+			Hand: 1, 
+			LinkPlayer: 1, 
+			Tournament: 1, 
+			Location: 
+				{$arrayElemAt: 
+					[{ $split: ["$Location", ", "] }, -1] 
+				}, 
+			Start:
+				{$arrayElemAt:
+					[{ $split: ["$Date", " - "] }, 0] 
+				}, 
+			End: 
+				{ $arrayElemAt: 
+					[{ $split: ["$Date", " - "] }, -1] 
+				}, 
+			Prize: 
+				{$substr:
+					[{ $concat: [" $", { $substrCP: ["$Prize", 1, 20] }] }, 1, -1]
+				},
+			Ground: 1,
+			GameRound: 1, 
+			GameRank: 1, 
+			Oponent: 1, 
+			WL: 1, 
+			Score: 1 
+		} 
+	}, 
+	{$merge:"atp2"}
+])
+// valores exportados para atp2: 1308835 (db.atp2.countDocuments())
+
+
+// Comando para atualizar manualmente os jogos sem Oponent
+
+db.atp2.bulkWrite([
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Felipe Derdoy",
+		  GameRound: "Round of 32",
+		  Score: "63 46 61", 
+		  Start: "2018.11.12"
+		},
+		update: { $set: { Oponent: "Rivas Maturana Vicente Manuel" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Alexandru Vasile Manole",
+		  GameRound: "Round of 32",
+		  Score: "62 61", 
+		  Start: "2018.09.10"
+		},
+		update: { $set: { Oponent: "Savin Robert Damian" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Josip Dumanic",
+		  GameRound: "Round of 32",
+		  Score: "64 63", 
+		  Start: "1998.07.06"
+		},
+		update: { $set: { Oponent: "Kreso Zrinski" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Ervand Gasparyan",
+		  GameRound: "2nd Round Qualifying",
+		  Score: "60 62", 
+		  Start: "2011.05.16"
+		},
+		update: { $set: { Oponent: "Sapaev Botir" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Azizbek Lukmanov",
+		  GameRound: "1st Round Qualifying",
+		  Score: "26 26",
+		  Start: "2011.05.16"
+		},
+		update: { $set: { Oponent: "Sapaev Botir" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Michael Redlicki",
+		  GameRound: "1st Round Qualifying",
+		  Score: "62 62",
+		  Start: "2018.11.12"
+		},
+		update: { $set: { Oponent: "Gomez Lucas" } }
+	  }
+	},
+	{
+	  updateOne: {
+		filter: {
+		  PlayerName: "Francisco Rodriguez",
+		  GameRound: "Round Robin",
+		  Score: "63 61",
+		  Start: "1998.07.13"
+		},
+		update: { $set: { Oponent: "Jesse Smatt" } }
+	  }
+	}
+  ])
+// output: matchedCount = modifiedCount = 7
+
+
+// Comandos para criar uma collection com os PlayerName e os Oponents
+
+db.atp2.aggregate([ 
+	{ $group: 
+		{ _id: 
+			{
+				Name: "$PlayerName", 
+				Born: "$Born", 
+				Hand: "$Hand", 
+				Height: "$Height", 
+				LinkPlayer: "$LinkPlayer" 
+			} 
+		} 
+	}, 
+	{$project: 
+		{
+			Name: "$_id.Name", 
+			Born: "$_id.Born", 
+			Hand: "$_id.Hand", 
+			Height: "$_id.Height", 
+			LinkPlayer: "$_id.LinkPlayer", 
+			_id:0 
+		} 
+	}, 
+	{$merge:"Players"}
+])
+// valores exportados para Players até o momento: 9960 (db.Players.countDocuments())
+
+
+// Guarda numa variável os nomes dos jogadores já guardados na collection Players
+
+var pName = db.Players.distinct("Name")
+
+
+// Dando sequência
+db.atp2.aggregate([ 
+	{ $match: { Oponent: { $nin: pName } } }, 
+	{ $group: { _id: "$Oponent", Total: { $sum: 0 } } }, 
+	{ $project: 
+		{ Name: "$_id", Born: "", Hand: "", Height: { $literal: 0 }, LinkPlayer: "", _id:0 } 
+	}, 
+	{$merge:"Players"}
+] )
+// valores exportados para Players: 22696 (db.Players.countDocuments())
+
+
+// Comando para uniformizar os países dos jogadores com Born que já se encontram no csv
+
+var playerCountryMap = {}; // Variável “mapa” para armazenar o player_id e country da coleção all_players
+
+db.all_players.aggregate([
+	{$group: 
+		{
+			_id: "$player_id",  // Agrupar por player_id (corresponde ao nome do jogador)
+			country: { $first: "$country" }  // guarda o país do player_id
+		}
+	}
+]).forEach(function(player) {
+	playerCountryMap[player._id] = player.country;  // Armazena o país na posição do player_id
+});
+
+
+var bulkOps = [];  // Lista para armazenar as operações de "atualização" em lote
+
+db.Players.find().forEach(function(atpPlayer) 
+	{var atpPlayerNameModified = atpPlayer.Name.replace(/ /g, "-");  // Modificar o nome para comparação
+
+	 // Verificar se o Name tem "Born" e se existe na variável “mapa"
+
+	 if (atpPlayer.Born && atpPlayer.Born !== "" && playerCountryMap[atpPlayerNameModified]) 
+	 	{var country = playerCountryMap[atpPlayerNameModified];  // Guarda o país correspondente do “Name” do jogador
+
+		  // Atualiza o campo Born com o novo país, caso seja o mesmo não irá ser atualizado
+
+		bulkOps.push(
+			{  updateOne:// Adiciona uma operação de atualização à lista bulkOps
+				{
+					filter: { _id: atpPlayer._id },  // Identifica o jogador pelo seu _id
+					update: { $set: { Born: country } }  // Atualiza o campo Born com o novo país
+				}
+		  	});
+		}
+	}
+);
+
+// Executa todas as operações de atualização em lote
+
+if (bulkOps.length > 0) {
+	 db.Players.bulkWrite(bulkOps);
+}
+// output: matchedCount = 3572, modifiedCount = 3201
+
+
+// Comando para uniformizar os países dos jogadores com Born que não se encontram no csv
+
+db.Players.updateMany(
+	{},
+		[
+			{$set: 
+				{Born: 
+					{$switch: 
+						{branches: 
+							[
+								{ case: { $in: ["$Name", ["Stephen Longley", "Ben Shelton", "K.J. Weiss", "Cayetano March", "Paul Oosterbaan", "Jermaine Jenkins", 
+								"Brian MacPhie", "Alex O'Brien", "Emmett Ward IV", "Michael McClune", "MaliVai Washington", "Ozan Colak", 
+								"Mackenzie McDonald", "Jeremy Hunter Nicholas", "J.J. Wolf", "John McNally", "KJ Hippensteel", "Justin O'Neal", 
+								"Wade McGuire", "T.J. Middleton", "Matt Sabo", "Devin McCarthy", "Steve DeVries", "JC Aragone", "Patrick McEnroe", 
+								"Junior A. Ore", "Alexander Kotzen"]] }, then: "USA" },
+								{ case: { $in: ["$Name", ["Osgar O'Hoisin", "David O'Hare", "James McGee"]] }, then: "IRL" },
+								{ case: { $in: ["$Name", ["Sean Hess", "Felipe D'Annunzio", "Juan Martin del Potro"]] }, then: "ARG" },
+								{ case: { $in: ["$Name", ["Miles MacLagan"]] }, then: "ZMB" },
+								{ case: { $in: ["$Name", ["Hamidreza Nadaf"]] }, then: "IRN" },
+								{ case: { $in: ["$Name", ["Conner Huertas del Pino", "Jorge Panta", "Arklon Huertas Del Pino Cordova"]] }, then: "PER" },
+								{ case: { $in: ["$Name", ["Thiemo de Bakker", "Melvyn Op der Heijde", "Botic van de Zandschulp"]] }, then: "NLD" },
+								{ case: { $in: ["$Name", ["Claude N'Goran"]] }, then: "CIV" },
+								{ case: { $in: ["$Name", ["Haadin Salim Bava", "Digvijaypratap Singh", "N.Sriram Balaji", "Mukund Sasikumar"]] }, then: "IND" },
+								{ case: { $in: ["$Name", ["Chien-hsun Lo", "Chun-hsin Tseng", "Li-Wei Tan"]] }, then: "TWN" },
+								{ case: { $in: ["$Name", ["Massimo Dell'Acqua", "Domenico Cutuli"]] }, then: "ITA" },
+								{ case: { $in: ["$Name", ["James Trotter"]] }, then: "JPN" },
+								{ case: { $in: ["$Name", ["Cristian Garin", "Tomas Barrios Vera"]] }, then: "CHL" },
+								{ case: { $in: ["$Name", ["James McCabe"]] }, then: "PHL" },
+								{ case: { $in: ["$Name", ["Darren K. Polkinghorne", "Alex de Minaur", "Edward Winter", "Matthew Christopher Romios", "Christopher O'Connell", "Chanchai Sookton-eng"]] }, then: "AUS" },
+								{ case: { $in: ["$Name", ["Murkel Dellien"]] }, then: "BOL" },
+								{ case: { $in: ["$Name", ["Luiz Carvalho", "Marcos Vinicius Dias", "Lourenzo Gasperini", "Joao Eduardo Schiessl", "Gabriel Tumasonis", "Daniel Dutra da Silva", "Gilbert Klier Junior", "Marvin Bernardo Spiering", "Felipe Assuncao Garla"]] }, then: "BRA" },
+								{ case: { $in: ["$Name", ["Daniel Munoz de la Nava", "Jose Antonio (Pepe) Conde", "Xavier Avila", "Jaime Fermosell Delgado", "Carlos Alcaraz", "Daniel Merida Aguilar"]] }, then: "ESP" },
+								{ case: { $in: ["$Name", ["Holger Rune"]] }, then: "DNK" },
+								{ case: { $in: ["$Name", ["Dean O'Brien", "Izak Van der Merwe", "John-Laffnie de Jager"]] }, then: "ZAF" },
+								{ case: { $in: ["$Name", ["Alexandar Lazov"]] }, then: "BGR" },
+								{ case: { $in: ["$Name", ["Edouard Villoslada", "Pierre Antoine Tailleu", "Matt Ponchet", "Matthieu Perchicot", "Jonathan Dasnieres de Veigy"]] }, then: "FRA" },
+								{ case: { $in: ["$Name", ["Chan-yeong Oh", "MinKyu Song", "Seong-chan Hong", "JiSung Nam"]] }, then: "KOR" },
+								{ case: { $in: ["$Name", ["Tomas Anzari"]] }, then: "CZE" },
+								{ case: { $in: ["$Name", ["Henry Patten", "Steve Lockwood"]] }, then: "ENG" },
+								{ case: { $in: ["$Name", ["Dominic Stricker"]] }, then: "CHE" },
+								{ case: { $in: ["$Name", ["Juri Barkov"]] }, then: "FIN" },
+								{ case: { $in: ["$Name", ["John van Lottum"]] }, then: "MDG" },
+								{ case: { $in: ["$Name", ["Aidan McHugh", "Jonny O'Mara"]] }, then: "SCO" },
+								{ case: { $in: ["$Name", ["Kent Tagashira"]] }, then: "GTM" },
+								{ case: { $in: ["$Name", ["Muzingaye Sibanda"]] }, then: "ZWE" },
+								{ case: { $in: ["$Name", ["Alexandru Jecan"]] }, then: "ROU" },
+								{ case: { $in: ["$Name", ["Alejandro Hoyos"]] }, then: "COL" },
+								{ case: { $in: ["$Name", ["G.D. Jones", "Ben McLachlan"]] }, then: "NZL" },
+								{ case: { $in: ["$Name", ["Wei Qiang Zheng"]] }, then: "CHN" },
+								{ case: { $in: ["$Name", ["Milos Karol"]] }, then: "SVK" },
+								{ case: { $in: ["$Name", ["John McEnroe"]] }, then: "DEU" },
+								{ case: { $in: ["$Name", ["Andrei Iakovlev"]] }, then: "RUS" },
+								{ case: { $in: ["$Name", ["Saida'Lo Saidkarimov", "Sanetulla Kutibaev"]] }, then: "UZB" },
+								{ case: { $in: ["$Name", ["Juan Ignacio Batalla"]] }, then: "MEX" }
+							],
+						default: "$Born"
+						}
+					}
+				}
+			}
+		]
+);
+// output: matchedCount = 22696, modifiedCount = 101
+
+
+// Comando para atribuir países aos Players sem Born
+
+var playerCountryMap = {} // Variável “mapa” para armazenar o player_id e country da coleção all_players
+
+db.all_players.aggregate([
+	{$group: 
+		{
+			_id: "$player_id",  // Agrupamento pelo player_id
+			country: { $first: "$country" }  // guarda o país do player_id
+		}
+	}
+]).forEach(function(player) {
+	playerCountryMap[player._id] = player.country; // Armazena o país na posição do player_id
+})
+
+
+var bulkOps = [] // Lista para armazenar as operações de “atualização” em lote
+
+db.Players.find().forEach(function(atpPlayer) {
+	var atpPlayerNameModified = atpPlayer.Name.replace(/ /g, "-");  // Substitui espaços por "-"
+	// Verifica se o Name modificado existe na variável “mapa"
+	if (playerCountryMap[atpPlayerNameModified]) 
+		{var country = playerCountryMap[atpPlayerNameModified];  // Guarda o país correspondente do “Name” do jogador
+		// Se o campo Born estiver vazio, preenche com o país
+		if (!atpPlayer.Born || atpPlayer.Born == "") 
+			{bulkOps.push(
+				{ updateOne: // Adiciona uma operação de atualização à lista 
+					{
+						filter: { _id: atpPlayer._id },  // Identifica o jogador pelo seu _id
+						update: { $set: { Born: country } }  // Atualiza o campo Born com o país
+					}
+				});
+			}
+			return;  // Interrompe o loop caso encontre o jogador correspondente
+		}
+	}
+);
+
+// Executa as operações de atualização em lote
+
+if (bulkOps.length > 0) {
+		db.Players.bulkWrite(bulkOps);
+}
+// output: matchedCount = 16790, modifiedCount = 16790
+
+
+// Comandos feitos para o ajuste com o csv “All_Country_code”
+
+db.Players.updateMany(
+	{
+		Born: "Germany"
+	},
+	{$set: 
+		{Born: "DEU"}
+	}
+)
+// output: matchedCount = 1036, modifiedCount = 1036
+
+
+db.Players.bulkWrite([
+	{updateMany: {filter: { Born: "CAL" },update: {$set: { Born: "NCL" } }}},
+	{updateMany: {filter: { Born: "NMI" },update: {$set: { Born: "MNP" } }}},
+	{updateMany: {filter: { Born: "MRN" },update: {$set: { Born: "FRA" } }}},
+	{updateMany: {filter: { Born: "IRI" },update: {$set: { Born: "IRN" } }}},
+	{updateMany: {filter: { Born: "FRG" },update: {$set: { Born: "DEU" } }}},
+	{updateOne: {filter: { Name: "Vernon Lewis" },update: {$set: {Born: "CAN" }}}},
+	{updateOne: {filter: { Name: "Deron Grant" },update: {$set: {Born: "FIN" }}}},
+	{updateMany: {filter: { Name: { $in: ["Stephane Balagne", "Jean-Baptiste Vivies"] } },update: {$set: { Born: "FRA" } }}},
+	{updateOne: {filter: { Name: "Nicolas Ancedy" },update: {$set: { Born: "GLP" } }}},
+	{updateOne: {filter: { Name: "Diegori Rosselet" },update: {$set: { Born: "ECU" } }}},
+	{updateOne: {filter: { Name: "Richard Brej" },update: {$set: { Born: "USA" } }}}
+  ]);
+// output: matchedCount = 90, modifiedCount = 90
+
+
+// Comando para uniformizar as siglas que foram atribuidas com os Updates
+
+var tresSiglas = {};
+
+db.codes_siglas.aggregate([
+	{$addFields: 
+		{ioc: 
+			{$cond: 
+				{if: 
+					{$or: [{ $eq: ["$IOC", null] }, { $eq: ["$IOC", ""] }] }, 
+					then: "$ISO-ALPHA-3", 
+					else: "$IOC" 
+				} 
+			},
+			fifa: 
+			{$cond: 
+				{if: 
+					{ $or: [{ $eq: ["$FIFA", null] }, { $eq: ["$FIFA", ""] }] }, 
+					then: "$ISO-ALPHA-3", 
+					else: "$FIFA" 
+				} 
+			}
+		}
+	},
+	{$group: {
+			_id: "$ISO-ALPHA-3",
+			ioc: { $first: "$ioc" },
+			fifa: { $first: "$fifa" }
+		}
+	}
+]).forEach(function (sigla) {
+	tresSiglas[sigla._id] = [sigla.ioc, sigla.fifa];
+});
+
+
+var bulkOps = [];
+
+db.Players.find().forEach(function (player) {
+	if (player.Born) { // Verifica se Born não está vazio
+		for (var key in tresSiglas) 
+			{if (tresSiglas[key]) 
+				{if (player.Born == key || tresSiglas[key].includes(player.Born)) // Verifica se a chave existe no objeto
+					{bulkOps.push(
+						{updateOne: 
+							{
+								filter: { _id: player._id },
+								update: { $set: { Born: key } }
+							}
+						});
+					break; // Para de verificar outras chaves, já que encontramos uma correspondência
+					}
+				}
+			}
+		}
+	}
+);
+
+// Realiza as operações em lote
+
+if (bulkOps.length > 0) {
+	db.Players.bulkWrite(bulkOps);
+}
+// output: matchedCount = 20461, modifiedCount = 2969
+
+
+// Comando para atribuir "GHOST-FLAG" aos jogadores sem Born
+
+db.Players.updateMany({Born: ""}, {$set: {Born: "GHOST-FLAG"}})
+// output: matchedCount = 2222, modifiedCount = 2222
+
+
+// Comando para dar split da Hand e BackHand
+
+db.Players.updateMany(
+	{ Hand: { $exists: true, $ne: "" } },
+	[
+		{$set: 
+			{
+				Hand: { $arrayElemAt: [ { $split: ["$Hand", ", "] }, 0 ] },  
+				Backhand: { $arrayElemAt: [ { $split: ["$Hand", ", "] }, 1 ] }
+			}
+		}
+	]
+);
+// output: matchedCount = 9960, modifiedCount = 5973
+
+
+// Comando para tratar dos players sem Hand
+
+var playerNameMap = {}; // Variável “mapa” para armazenar o fullname e hand da coleção all_players_hand
+
+db.all_players_hand.aggregate([
+	{$project: 
+		{full_name: 
+			{$concat: 
+				[
+					{$toString: "$name_first"}, "-", {$toString: "$name_last"}
+				] // Une o primeiro e ultimo nome
+			},
+			hand: 1 // “projeta” a variável “hand”
+		}
+	}
+]).forEach(function (player) {
+	playerNameMap[player.full_name] = player.hand //Associa ao fullname do jogador a sua “hand”
+});
+
+var bulkOps = []; //Lista para armazenar as operações de "atualização" em lote
+
+db.Players.find().forEach(function (atpPlayer) {
+	var atpPlayerNameModified = atpPlayer.Name.replace(/ /g, "-"); // Modifica o nome para comparação
+	// Verifica se o Name existe no “mapa” e se “H”and está vazio
+	if (playerNameMap[atpPlayerNameModified] && (!atpPlayer.Hand || atpPlayer.Hand == "")) 
+		{var newHandValue = playerNameMap[atpPlayerNameModified]; // Guarda o valor de “hand” do respetivo jogador
+		// Atualiza o campo “Hand” com o novo valor
+		bulkOps.push(
+			{updateOne: 
+				{
+					filter: { _id: atpPlayer._id }, // Identifica o jogador pelo seu _id
+					update: { $set: { Hand: newHandValue } } 
+				}
+			});
+		}
+	}
+);
+
+// Executa todas as operações de atualização em lote
+
+if (bulkOps.length > 0) {
+	 db.Players.bulkWrite(bulkOps)
+}
+// output: matchedCount = 9104, modifiedCount = 9104
+
+
+// Comando para uniformizar a variável Hand e Backhand
+
+db.Players.updateMany(
+	{},
+	[
+		{$set: { Hand: { $switch: {
+			branches: [
+				{case: {$eq: ["$Hand", "Right-Handed"]}, then: "R"},
+				{case: {$eq: ["$Hand", "Left-Handed"]}, then: "L"},
+				{case: {$eq: ["$Hand", "Ambidextrous"]}, then: "A"},
+				{case: {$in: ["$Hand", ["null", ""]]}, then: "U"}
+			],
+			default: "$Hand"
+		}}}}
+	]
+);
+// output: matchedCount = 22696, modifiedCount = 13592
+
+
+db.Players.updateMany(
+	{},
+	[
+		{$set: {Backhand: {$switch: {
+			branches: [
+				{case: {$eq: ["$Backhand", "One-Handed Backhand"]}, then: "O"},
+				{case: {$eq: ["$Backhand", "Two-Handed Backhand"]}, then: "T"},
+				{case: {$eq: ["$Backhand", "Unknown Backhand"]}, then: "U"},
+			],
+			default: "U"
+		}}}}
+	]
+);
+// output: matchedCount = 22696, modifiedCount = 22696
+
+
+// Comando para criar uma collection de confrontos (excluindo os registos duplicados)
+
+db.atp2.aggregate([ 
+	{$group: 
+		{ _id: 
+			{
+				PlayerName: "$PlayerName", Oponent: "$Oponent", 
+				Tournament: "$Tournament", Start: "$Start", End: "$End", Location: "$Location",
+				GameRound: "$GameRound", GameRank: "$GameRank", 
+				WL: "$WL", 
+				Score: "$Score", 
+				Prize: "$Prize"
+			} 
+		} 
+	}, 
+	{$project: 
+		{
+			PlayerName: "$_id.PlayerName", 
+			Oponent: "$_id.Oponent", 
+			Tournament: "$_id.Tournament", 
+			Start: "$_id.Start", 
+			End: "$_id.End", 
+			Location: "$_id.Location",
+			GameRound: "$_id.GameRound", 
+			OponentRank: "$_id.GameRank", 
+			WL: "$_id.WL", 
+			Score: "$_id.Score", 
+			Prize: "$_id.Prize", 
+			_id:0 
+		} 
+	},
+	{ $merge: "Confrontos"}
+])
+// valores exportados para Confrontos: 1306005 (db.Confrontos.countDocuments())
+
+
+// Comando para alterar o WL quando o Oponent é bye para W
+
+db.Confrontos.updateMany(
+	{Oponent:"bye"}, 
+	{$set: {WL:"W"} }
+)
+// output: matchedCount = 19155, modifiedCount = 19152
+
+
+// Comando para atualizar manualmente o unico jogo sem Winner mas que foi realizado
+
+db.Confrontos.updateOne({
+	PlayerName: "Bruno Oresar",
+	Oponent: "Guillermo Rivas",
+	Start: "1985.04.29"
+	},
+	{$set:
+		 {Score: "57 36", WL: "L"}}
+)
+// output: matchedCount = 1, modifiedCount = 1
+
+
+// Comando para atualizar as Locations em Confrontos
+
+db.Confrontos.updateMany(
+    {},
+    [
+        {
+            $set: {
+                Location: {
+                    $switch: {
+                        branches: [
+                            { case: { $in: ["$Location", ["Algeria"]] }, then: "DZA" },
+                            { case: { $in: ["$Location", ["Andorra"]] }, then: "AND" },
+                            { case: { $in: ["$Location", ["AR", "Arg.", "Argent", "Argentina", "Buenos Aires"]] }, then: "ARG" },
+                            { case: { $in: ["$Location", ["Armenia"]] }, then: "ARM" },
+                            { case: { $in: ["$Location", ["Aruba"]] }, then: "ABW" },
+                            { case: { $in: ["$Location", ["Australia", "Pacific Oceania", "Tasmania", "Victoria", "Devonport", "West Perth"]] }, then: "AUS" },
+                            { case: { $in: ["$Location", ["Austria", "Aut.", "Portschach"]] }, then: "AUT" },
+                            { case: { $in: ["$Location", ["Azerbaijan"]] }, then: "AZE" },
+                            { case: { $in: ["$Location", ["Bahamas"]] }, then: "BHS" },
+                            { case: { $in: ["$Location", ["Bahrain"]] }, then: "BHR" },
+                            { case: { $in: ["$Location", ["Bangladesh"]] }, then: "BGD" },
+                            { case: { $in: ["$Location", ["Barbados"]] }, then: "BRB" },
+                            { case: { $in: ["$Location", ["Belarus", "Minsk"]] }, then: "BLR" },
+                            { case: { $in: ["$Location", ["Belgium", "Liege", "Angleur - Liege"]] }, then: "BEL" },
+                            { case: { $in: ["$Location", ["Bermuda"]] }, then: "BMU" },
+                            { case: { $in: ["$Location", ["Bolivia", "Bolivia/Chile", "Santa Cruz de la Sie"]] }, then: "BOL" },
+                            { case: { $in: ["$Location", ["Bosnia", "Bosnia &amp; Herzegovina"]] }, then: "BIH" },
+                            { case: { $in: ["$Location", ["Botwana"]] }, then: "BWA" },
+                            { case: { $in: ["$Location", ["Brazil", "Braz", "Bahia", "Brazi", "Brasilia","Guarulhos", "Salvador", "Florianapolis", "Rio de Janeiro"]] }, then: "BRA" },
+                            { case: { $in: ["$Location", ["Brunei"]] }, then: "BRN" },
+                            { case: { $in: ["$Location", ["Bulgaria"]] }, then: "BGR" },
+                            { case: { $in: ["$Location", ["Burundi"]] }, then: "BDI" },
+                            { case: { $in: ["$Location", ["Cambodia"]] }, then: "KHM" },
+                            { case: { $in: ["$Location", ["Cameroon"]] }, then: "CMR" },
+                            { case: { $in: ["$Location", ["Canada", "Canda", "Alberta", "Calgary", "Ontaria"]] }, then: "CAN" },
+                            { case: { $in: ["$Location", ["Chile", "Santiago"]] }, then: "CHL" },
+                            { case: { $in: ["$Location", ["China", "Wuhan", "Nanjing", "Chinese Taip"]] }, then: "CHN" },
+                            { case: { $in: ["$Location", ["Col", "Colombia", "Columbia", "Villavicencio"]] }, then: "COL" },
+                            { case: { $in: ["$Location", ["Costa Rica"]] }, then: "CRI" },
+                            { case: { $in: ["$Location", ["Abidjan", "Ivory Coast"]] }, then: "CIV" },
+                            { case: { $in: ["$Location", ["Croatia", "Crotia"]] }, then: "HRV" },
+                            { case: { $in: ["$Location", ["Cuba", "Havana", "Ciudad de Habana"]] }, then: "CUB" },
+                            { case: { $in: ["$Location", ["Curacao"]] }, then: "CUW" },
+                            { case: { $in: ["$Location", ["Cyprus"]] }, then: "CYP" },
+                            { case: { $in: ["$Location", ["Czech Repub", "Czech Rep.", "Czech Republic", "D.R."]] }, then: "CZE" },
+                            { case: { $in: ["$Location", ["Czechoslovakia"]] }, then: "CSK" },
+                            { case: { $in: ["$Location", ["Denmark", "DEN."]] }, then: "DNK" },
+                            { case: { $in: ["$Location", ["Dominican Republic", "D.R.", "Santo Domingo", "Domincan Republic"]] }, then: "DOM" },
+                            { case: { $in: ["$Location", ["Ecuador", "Guayaquil", "Salinas"]] }, then: "ECU" },
+                            { case: { $in: ["$Location", ["Egypt", "Eygpt", "Egpyt", "Sharm El Sheikh"]] }, then: "EGY" },
+                            { case: { $in: ["$Location", ["El Salvador", "San Salvador"]] }, then: "SLV" },
+                            { case: { $in: ["$Location", ["London", "England", "Scotland"]] }, then: "GB-ENG" },
+                            { case: { $in: ["$Location", ["Estonia"]] }, then: "EST" },
+                            { case: { $in: ["$Location", ["Fiji Island"]] }, then: "FJI" },
+                            { case: { $in: ["$Location", ["Finland"]] }, then: "FIN" },
+                            { case: { $in: ["$Location", ["France", "Uriage", "Forbach", "Toulouse", "Bourg-en-Bresse", "Lesser Antilles"]] }, then: "FRA" },
+                            { case: { $in: ["$Location", ["Pau"]] }, then: "PYF" }, // French Polynesia
+                            { case: { $in: ["$Location", ["Gabon"]] }, then: "GAB" },
+                            { case: { $in: ["$Location", ["Georgia"]] }, then: "GEO" },
+                            { case: { $in: ["$Location", ["Germany", "Wetzlar", "Braunschweig"]] }, then: "DEU" },
+                            { case: { $in: ["$Location", ["Ghana"]] }, then: "GHA" },
+                            { case: { $in: ["$Location", ["Greece"]] }, then: "GRC" },
+                            { case: { $in: ["$Location", ["Guadeloupe"]] }, then: "GLP" },
+                            { case: { $in: ["$Location", ["Guam"]] }, then: "GUM" },
+                            { case: { $in: ["$Location", ["Guatemala City", "Guatemala"]] }, then: "GTM" },
+                            { case: { $in: ["$Location", ["Haiti"]] }, then: "HTI" },
+                            { case: { $in: ["$Location", ["Honduras"]] }, then: "HND" },
+                            { case: { $in: ["$Location", ["HKG", "Hong Kong"]] }, then: "HKG" },
+                            { case: { $in: ["$Location", ["Hu", "Hunary", "Hungary"]] }, then: "HUN" },
+                            { case: { $in: ["$Location", ["India", "Kolkata"]] }, then: "IND" },
+                            { case: { $in: ["$Location", ["INA", "Jakarta", "Surabaya", "Indonesia"]] }, then: "IDN" },
+                            { case: { $in: ["$Location", ["Iran", "Tehran"]] }, then: "IRN" },
+                            { case: { $in: ["$Location", ["Dublin", "Ireland"]] }, then: "IRL" },
+                            { case: { $in: ["$Location", ["Isra", "Israel", "Hasharon", "Ramat Hasharon"]] }, then: "ISR" },
+                            { case: { $in: ["$Location", ["Ita", "Italy", "Sardinia", "Reggio Calabria"]] }, then: "ITA" },
+                            { case: { $in: ["$Location", ["Jamaica"]] }, then: "JAM" },
+                            { case: { $in: ["$Location", ["Japan"]] }, then: "JPN" },
+                            { case: { $in: ["$Location", ["Jordan"]] }, then: "JOR" },
+                            { case: { $in: ["$Location", ["Kazakhstan"]] }, then: "KAZ" },
+                            { case: { $in: ["$Location", ["Kenya"]] }, then: "KEN" },
+                            { case: { $in: ["$Location", ["Kuwait"]] }, then: "KWT" },
+                            { case: { $in: ["$Location", ["Laos"]] }, then: "LAO" },
+                            { case: { $in: ["$Location", ["Latvia"]] }, then: "LVA" },
+                            { case: { $in: ["$Location", ["Lebanon"]] }, then: "LBN" },
+                            { case: { $in: ["$Location", ["Lithuania"]] }, then: "LTU" },
+                            { case: { $in: ["$Location", ["Luxembourg", "Mondorf-Les-Bains", "Esch/Alzette", "Esch-sur-Alzette"]] }, then: "LUX" },
+                            { case: { $in: ["$Location", ["Macedona", "Macedonia"]] }, then: "MKD" },
+                            { case: { $in: ["$Location", ["Madagascar"]] }, then: "MDG" },
+                            { case: { $in: ["$Location", ["Malaysia", "Kuala Lampur"]] }, then: "MYS" },
+                            { case: { $in: ["$Location", ["Malta"]] }, then: "MLT" },
+                            { case: { $in: ["$Location", ["Mauritius"]] }, then: "MUS" },
+                            { case: { $in: ["$Location", ["Meixco", "Mexica", "Mexico", "Toluca", "Caribbean", "Mexico City"]] }, then: "MEX" },
+                            { case: { $in: ["$Location", ["Moldova", "Moldovia"]] }, then: "MDA" },
+                            { case: { $in: ["$Location", ["Monaco"]] }, then: "MCO" },
+                            { case: { $in: ["$Location", ["Montenegro"]] }, then: "MNE" },
+                            { case: { $in: ["$Location", ["Morocco", "Casablanca"]] }, then: "MAR" },
+                            { case: { $in: ["$Location", ["Mozambique"]] }, then: "MOZ" },
+                            { case: { $in: ["$Location", ["Myanmar"]] }, then: "MMR" },
+                            { case: { $in: ["$Location", ["Namibia"]] }, then: "NAM" },
+                            { case: { $in: ["$Location", ["Elndhoven", "The Hague", "'s-Hertogenbosch", "The Nethe", "Netherlands", "The Netherlands"]] }, then: "NLD" },
+                            { case: { $in: ["$Location", ["Dutch Antil", "Dutch Anti", "Willemstad", "s-Hertogenbosch"]] }, then: "ANT" },
+                            { case: { $in: ["$Location", ["New Caledonia", "New Caledoni"]] }, then: "NCL" },
+                            { case: { $in: ["$Location", ["NZ", "New Zealan", "Wellington", "New Zealand"]] }, then: "NZL" },
+                            { case: { $in: ["$Location", ["Nicaragua"]] }, then: "NIC" },
+                            { case: { $in: ["$Location", ["Nigeria"]] }, then: "NGA" },
+                            { case: { $in: ["$Location", ["Norway"]] }, then: "NOR" },
+                            { case: { $in: ["$Location", ["Oman"]] }, then: "OMN" },
+                            { case: { $in: ["$Location", ["Lahore", "Pakistan"]] }, then: "PAK" },
+                            { case: { $in: ["$Location", ["Panama"]] }, then: "PAN" },
+                            { case: { $in: ["$Location", ["Paraguay"]] }, then: "PRY" },
+                            { case: { $in: ["$Location", ["Peru"]] }, then: "PER" },
+                            { case: { $in: ["$Location", ["Manila", "Manilla", "Philippines", "Phillipines"]] }, then: "PHL" },
+                            { case: { $in: ["$Location", ["Poland", "Wrocklaw"]] }, then: "POL" },
+                            { case: { $in: ["$Location", ["Faro", "Estoril", "Portugal"]] }, then: "PRT" },
+                            { case: { $in: ["$Location", ["Puerto Rico"]] }, then: "PRI" },
+                            { case: { $in: ["$Location", ["Reunion Island"]] }, then: "REU" },
+                            { case: { $in: ["$Location", ["Doha", "Qatar"]] }, then: "QAT" },
+                            { case: { $in: ["$Location", ["Romania", "Bucharest", "Constanta"]] }, then: "ROU" },
+                            { case: { $in: ["$Location", ["Moscow", "Russia", "Korolev"]] }, then: "RUS" },
+                            { case: { $in: ["$Location", ["Rwanda"]] }, then: "RWA" },
+                            { case: { $in: ["$Location", ["Samoa"]] }, then: "WSM" },
+                            { case: { $in: ["$Location", ["San Marino"]] }, then: "SMR" },
+                            { case: { $in: ["$Location", ["Senegal"]] }, then: "SEN" },
+                            { case: { $in: ["$Location", ["Serbia", "Belgrade"]] }, then: "SRB" },
+                            { case: { $in: ["$Location", ["Serbia", "SErgia &amp; M", "Serbia &amp; Montenegro"]] }, then: "SCG" },
+                            { case: { $in: ["$Location", ["Singapore"]] }, then: "SGP" },
+                            { case: { $in: ["$Location", ["Presov", "Slovak", "Slovkia", "Portoroz", "Slovakia", "Bratislava","Slovak R", "Slovak Republic"]] }, then: "SVK" },
+                            { case: { $in: ["$Location", ["Slovenia", "Solvenia"]] }, then: "SVN" },
+                            { case: { $in: ["$Location", ["SA", "South", "Pretoria", "Nelspruit", "Polokwane", "South  Africa", "Johannesburg", "South Africa"]] }, then: "ZAF" },
+                            { case: { $in: ["$Location", ["Korea", "South Korea"]] }, then: "KOR" },
+                            { case: { $in: ["$Location", ["Bakio", "Spain", "Melilla", "Barcelona", "Valldoreix", "Palma de Mallorca"]] }, then: "ESP" },
+                            { case: { $in: ["$Location", ["Sri Lanka"]] }, then: "LKA" },
+                            { case: { $in: ["$Location", ["Saudi Arabia"]] }, then: "SAU" },
+                            { case: { $in: ["$Location", ["Sudan"]] }, then: "SDN" },
+                            { case: { $in: ["$Location", ["Soviet Union"]] }, then: "SUN" },
+                            { case: { $in: ["$Location", ["Sweden"]] }, then: "SWE" },
+                            { case: { $in: ["$Location", ["Switz", "Switz.","Neuchatel", "Switzerland"]] }, then: "CHE" }, 
+                            { case: { $in: ["$Location", ["Syria"]] }, then: "SYR" },
+                            { case: { $in: ["$Location", ["Taipei", "Taiwan", "Kaohsiung", "Chinese Ta", "Chinese Taipei"]] }, then: "TWN" },
+                            { case: { $in: ["$Location", ["Tajikistan"]] }, then: "TJK" },
+                            { case: { $in: ["$Location", ["Bangkok", "Thailand"]] }, then: "THA" },
+                            { case: { $in: ["$Location", ["Togo"]] }, then: "TGO" },
+                            { case: { $in: ["$Location", ["TRI"]] }, then: "TTO" },
+                            { case: { $in: ["$Location", ["Tunis", "Tunisia", "Monastir"]] }, then: "TUN" },
+                            { case: { $in: ["$Location", ["Turkey", "Antalya"]] }, then: "TUR" },
+                            { case: { $in: ["$Location", ["Uganda"]] }, then: "UGA" },
+                            { case: { $in: ["$Location", ["Ukraine", "Novaya Kakhovka"]] }, then:        "UKR" },
+                            { case: { $in: ["$Location", ["U.A.E."]] }, then: "ARE" },
+                            { case: { $in: ["$Location", ["UK", "Devon", "Britain", "Great Britain"]] }, then: "GBR" },
+                            { case: { $in: ["$Location", ["OK", "Texas", "U.S.A", "U.S.A.", "United S", "United States", "Delray Beach"]] }, then: "USA" },
+                            { case: { $in: ["$Location", ["Urugay", "Uraguay", "Montevideo", "Uruguay"]] }, then: "URY" },
+                            { case: { $in: ["$Location", ["Uzb.", "Tashkent", "Uzbekistan"]] }, then: "UZB" },
+                            { case: { $in: ["$Location", ["Lara", "Venezuela", "Venezeuela"]] }, then: "VEN" },
+                            { case: { $in: ["$Location", ["Vietnam"]] }, then: "VNM" },
+                            { case: { $in: ["$Location", ["Wales"]] }, then: "GB-WLS" },
+                            { case: { $in: ["$Location", ["Yug.", "Yugoslavia"]] }, then: "YUG" },
+                            { case: { $in: ["$Location", ["Harare", "Zimbabwe"]] }, then: "ZWE" },
+                            { case: { $in: ["$Location", ["TBA", "TBC", "TBD"]] }, then: "GHOST-FLAG" }
+                        ],
+                        default:"$Location"
+                    }
+                }
+            }
+        }
+    ]
+);
+// output: matchedCount = 1306005, modifiedCount = 1304300
+
+
+// Comando para uniformizar as siglas em Location, o mesmo que foi aplicado em "Born" na collection Players
+
+var tresSiglas = {}
+
+db.codes_siglas.aggregate([
+	{$addFields: 
+		{ioc: 
+			{$cond: 
+				{if: 
+					{ $or: [{ $eq: ["$IOC", null] }, { $eq: ["$IOC", ""] }] },
+					then: "$ISO-ALPHA-3",
+					else: "$IOC"
+				}
+			},
+		fifa: 
+			{$cond: 
+				{if: 
+					{ $or: [{ $eq: ["$FIFA", null] }, { $eq: ["$FIFA", ""] }] },
+					then: "$ISO-ALPHA-3",
+					else: "$FIFA"
+				}
+			}
+		}
+	},
+	{$group: 
+		{
+			_id: "$ISO-ALPHA-3",
+			ioc: { $first: "$ioc" },
+			fifa: { $first: "$fifa" }
+		}
+	}
+]).forEach(function (sigla) {
+	tresSiglas[sigla._id] = [sigla.ioc, sigla.fifa];
+})
+
+var bulkOps = []
+
+db.Confrontos.find().forEach(function (tournament) {
+	if (tournament.Location) { // Verifica se Location não está vazio
+		for (var key in tresSiglas) 
+			{if (tresSiglas[key]) 
+				{if (tournament.Location == key || tresSiglas[key].includes(tournament.Location)) // Verifica se a chave existe no objeto
+					{bulkOps.push(
+						{updateOne: 
+							{
+								filter: { _id: tournament._id },
+								update: { $set: { Location: key } }
+							}
+						});
+					break; // Para de verificar outras chaves, já que se encontrou uma correspondência
+					}
+				}
+			}
+		}
+	}
+)
+
+// Realiza as operações em lote
+
+if (bulkOps.length > 0) {
+	db.Confrontos.bulkWrite(bulkOps);
+}
+// output: matchedCount = 1304501, modifiedCount = 42
+
+
+// Comandos para criar a collection Season
+
+db.atp2.aggregate([ 
+	{$group: 
+		{ _id: 
+			{ 
+				Tournament: "$Tournament", 
+				Start: "$Start", End: "$End", Location: "$Location", 
+				Prize: "$Prize", Ground: "$Ground"
+			} 
+		} 
+	}, 
+	{$project: 
+		{
+			_id: 0, Tournament: "$_id.Tournament", 
+			Start: "$_id.Start", End: "$_id.End", 
+			Prize: "$_id.Prize", Location: "$_id.Location",
+			Ground: "$_id.Ground" 
+		}	 
+	}, 
+	{$merge:"Season"}
+] )
+// valores exportados para Season: 22236 (db.Season.countDocuments())
+
+
+// Tratamento do campo "Ground" dos torneios que foram possiveis encontrar 
+
+db.Season.bulkWrite([
+    {updateMany: {filter: { $and: [{ "Ground": "Unknown" }, { "Tournament": "M15 Opava" }] },update: { $set: { "Ground": "Carpet" } }}},
+    {updateMany: {filter: { $and: [{ "Ground": "Unknown" }, { "Tournament": "M15 Cancun" }] },update: { $set: { "Ground": "Hard" } }}},
+    {updateMany: {filter: { $and: [{ "Ground": "Unknown" }, { "Tournament": "M15 Antalya" }] },update: { $set: { "Ground": "Clay" } }}}
+	]
+);
+// output: matchedCount = 3, modifiedCount = 3
+
+
+// Comando para atualizar as Locations em Season
+
+db.Season.updateMany(
+    {},
+    [
+        {
+            $set: {
+                Location: {
+                    $switch: {
+                        branches: [
+                            { case: { $in: ["$Location", ["Algeria"]] }, then: "DZA" },
+                            { case: { $in: ["$Location", ["Andorra"]] }, then: "AND" },
+                            { case: { $in: ["$Location", ["AR", "Arg.", "Argent", "Argentina", "Buenos Aires"]] }, then: "ARG" },
+                            { case: { $in: ["$Location", ["Armenia"]] }, then: "ARM" },
+                            { case: { $in: ["$Location", ["Aruba"]] }, then: "ABW" },
+                            { case: { $in: ["$Location", ["Australia", "Pacific Oceania", "Tasmania", "Victoria", "Devonport", "West Perth"]] }, then: "AUS" },
+                            { case: { $in: ["$Location", ["Austria", "Aut.", "Portschach"]] }, then: "AUT" },
+                            { case: { $in: ["$Location", ["Azerbaijan"]] }, then: "AZE" },
+                            { case: { $in: ["$Location", ["Bahamas"]] }, then: "BHS" },
+                            { case: { $in: ["$Location", ["Bahrain"]] }, then: "BHR" },
+                            { case: { $in: ["$Location", ["Bangladesh"]] }, then: "BGD" },
+                            { case: { $in: ["$Location", ["Barbados"]] }, then: "BRB" },
+                            { case: { $in: ["$Location", ["Belarus", "Minsk"]] }, then: "BLR" },
+                            { case: { $in: ["$Location", ["Belgium", "Liege", "Angleur - Liege"]] }, then: "BEL" },
+                            { case: { $in: ["$Location", ["Bermuda"]] }, then: "BMU" },
+                            { case: { $in: ["$Location", ["Bolivia", "Bolivia/Chile", "Santa Cruz de la Sie"]] }, then: "BOL" },
+                            { case: { $in: ["$Location", ["Bosnia", "Bosnia &amp; Herzegovina"]] }, then: "BIH" },
+                            { case: { $in: ["$Location", ["Botwana"]] }, then: "BWA" },
+                            { case: { $in: ["$Location", ["Brazil", "Braz", "Bahia", "Brazi", "Brasilia","Guarulhos", "Salvador", "Florianapolis", "Rio de Janeiro"]] }, then: "BRA" },
+                            { case: { $in: ["$Location", ["Brunei"]] }, then: "BRN" },
+                            { case: { $in: ["$Location", ["Bulgaria"]] }, then: "BGR" },
+                            { case: { $in: ["$Location", ["Burundi"]] }, then: "BDI" },
+                            { case: { $in: ["$Location", ["Cambodia"]] }, then: "KHM" },
+                            { case: { $in: ["$Location", ["Cameroon"]] }, then: "CMR" },
+                            { case: { $in: ["$Location", ["Canada", "Canda", "Alberta", "Calgary", "Ontaria"]] }, then: "CAN" },
+                            { case: { $in: ["$Location", ["Chile", "Santiago"]] }, then: "CHL" },
+                            { case: { $in: ["$Location", ["China", "Wuhan", "Nanjing", "Chinese Taip"]] }, then: "CHN" },
+                            { case: { $in: ["$Location", ["Col", "Colombia", "Columbia", "Villavicencio"]] }, then: "COL" },
+                            { case: { $in: ["$Location", ["Costa Rica"]] }, then: "CRI" },
+                            { case: { $in: ["$Location", ["Abidjan", "Ivory Coast"]] }, then: "CIV" },
+                            { case: { $in: ["$Location", ["Croatia", "Crotia"]] }, then: "HRV" },
+                            { case: { $in: ["$Location", ["Cuba", "Havana", "Ciudad de Habana"]] }, then: "CUB" },
+                            { case: { $in: ["$Location", ["Curacao"]] }, then: "CUW" },
+                            { case: { $in: ["$Location", ["Cyprus"]] }, then: "CYP" },
+                            { case: { $in: ["$Location", ["Czech Repub", "Czech Rep.", "Czech Republic", "D.R."]] }, then: "CZE" },
+                            { case: { $in: ["$Location", ["Czechoslovakia"]] }, then: "CSK" },
+                            { case: { $in: ["$Location", ["Denmark", "DEN."]] }, then: "DNK" },
+                            { case: { $in: ["$Location", ["Dominican Republic", "D.R.", "Santo Domingo", "Domincan Republic"]] }, then: "DOM" },
+                            { case: { $in: ["$Location", ["Ecuador", "Guayaquil", "Salinas"]] }, then: "ECU" },
+                            { case: { $in: ["$Location", ["Egypt", "Eygpt", "Egpyt", "Sharm El Sheikh"]] }, then: "EGY" },
+                            { case: { $in: ["$Location", ["El Salvador", "San Salvador"]] }, then: "SLV" },
+                            { case: { $in: ["$Location", ["London", "England", "Scotland"]] }, then: "GB-ENG" },
+                            { case: { $in: ["$Location", ["Estonia"]] }, then: "EST" },
+                            { case: { $in: ["$Location", ["Fiji Island"]] }, then: "FJI" },
+                            { case: { $in: ["$Location", ["Finland"]] }, then: "FIN" },
+                            { case: { $in: ["$Location", ["France", "Uriage", "Forbach", "Toulouse", "Bourg-en-Bresse", "Lesser Antilles"]] }, then: "FRA" },
+                            { case: { $in: ["$Location", ["Pau"]] }, then: "PYF" }, // French Polynesia
+                            { case: { $in: ["$Location", ["Gabon"]] }, then: "GAB" },
+                            { case: { $in: ["$Location", ["Georgia"]] }, then: "GEO" },
+                            { case: { $in: ["$Location", ["Germany", "Wetzlar", "Braunschweig"]] }, then: "DEU" },
+                            { case: { $in: ["$Location", ["Ghana"]] }, then: "GHA" },
+                            { case: { $in: ["$Location", ["Greece"]] }, then: "GRC" },
+                            { case: { $in: ["$Location", ["Guadeloupe"]] }, then: "GLP" },
+                            { case: { $in: ["$Location", ["Guam"]] }, then: "GUM" },
+                            { case: { $in: ["$Location", ["Guatemala City", "Guatemala"]] }, then: "GTM" },
+                            { case: { $in: ["$Location", ["Haiti"]] }, then: "HTI" },
+                            { case: { $in: ["$Location", ["Honduras"]] }, then: "HND" },
+                            { case: { $in: ["$Location", ["HKG", "Hong Kong"]] }, then: "HKG" },
+                            { case: { $in: ["$Location", ["Hu", "Hunary", "Hungary"]] }, then: "HUN" },
+                            { case: { $in: ["$Location", ["India", "Kolkata"]] }, then: "IND" },
+                            { case: { $in: ["$Location", ["INA", "Jakarta", "Surabaya", "Indonesia"]] }, then: "IDN" },
+                            { case: { $in: ["$Location", ["Iran", "Tehran"]] }, then: "IRN" },
+                            { case: { $in: ["$Location", ["Dublin", "Ireland"]] }, then: "IRL" },
+                            { case: { $in: ["$Location", ["Isra", "Israel", "Hasharon", "Ramat Hasharon"]] }, then: "ISR" },
+                            { case: { $in: ["$Location", ["Ita", "Italy", "Sardinia", "Reggio Calabria"]] }, then: "ITA" },
+                            { case: { $in: ["$Location", ["Jamaica"]] }, then: "JAM" },
+                            { case: { $in: ["$Location", ["Japan"]] }, then: "JPN" },
+                            { case: { $in: ["$Location", ["Jordan"]] }, then: "JOR" },
+                            { case: { $in: ["$Location", ["Kazakhstan"]] }, then: "KAZ" },
+                            { case: { $in: ["$Location", ["Kenya"]] }, then: "KEN" },
+                            { case: { $in: ["$Location", ["Kuwait"]] }, then: "KWT" },
+                            { case: { $in: ["$Location", ["Laos"]] }, then: "LAO" },
+                            { case: { $in: ["$Location", ["Latvia"]] }, then: "LVA" },
+                            { case: { $in: ["$Location", ["Lebanon"]] }, then: "LBN" },
+                            { case: { $in: ["$Location", ["Lithuania"]] }, then: "LTU" },
+                            { case: { $in: ["$Location", ["Luxembourg", "Mondorf-Les-Bains", "Esch/Alzette", "Esch-sur-Alzette"]] }, then: "LUX" },
+                            { case: { $in: ["$Location", ["Macedona", "Macedonia"]] }, then: "MKD" },
+                            { case: { $in: ["$Location", ["Madagascar"]] }, then: "MDG" },
+                            { case: { $in: ["$Location", ["Malaysia", "Kuala Lampur"]] }, then: "MYS" },
+                            { case: { $in: ["$Location", ["Malta"]] }, then: "MLT" },
+                            { case: { $in: ["$Location", ["Mauritius"]] }, then: "MUS" },
+                            { case: { $in: ["$Location", ["Meixco", "Mexica", "Mexico", "Toluca", "Caribbean", "Mexico City"]] }, then: "MEX" },
+                            { case: { $in: ["$Location", ["Moldova", "Moldovia"]] }, then: "MDA" },
+                            { case: { $in: ["$Location", ["Monaco"]] }, then: "MCO" },
+                            { case: { $in: ["$Location", ["Montenegro"]] }, then: "MNE" },
+                            { case: { $in: ["$Location", ["Morocco", "Casablanca"]] }, then: "MAR" },
+                            { case: { $in: ["$Location", ["Mozambique"]] }, then: "MOZ" },
+                            { case: { $in: ["$Location", ["Myanmar"]] }, then: "MMR" },
+                            { case: { $in: ["$Location", ["Namibia"]] }, then: "NAM" },
+                            { case: { $in: ["$Location", ["Elndhoven", "The Hague", "'s-Hertogenbosch", "The Nethe", "Netherlands", "The Netherlands"]] }, then: "NLD" },
+                            { case: { $in: ["$Location", ["Dutch Antil", "Dutch Anti", "Willemstad", "s-Hertogenbosch"]] }, then: "ANT" },
+                            { case: { $in: ["$Location", ["New Caledonia", "New Caledoni"]] }, then: "NCL" },
+                            { case: { $in: ["$Location", ["NZ", "New Zealan", "Wellington", "New Zealand"]] }, then: "NZL" },
+                            { case: { $in: ["$Location", ["Nicaragua"]] }, then: "NIC" },
+                            { case: { $in: ["$Location", ["Nigeria"]] }, then: "NGA" },
+                            { case: { $in: ["$Location", ["Norway"]] }, then: "NOR" },
+                            { case: { $in: ["$Location", ["Oman"]] }, then: "OMN" },
+                            { case: { $in: ["$Location", ["Lahore", "Pakistan"]] }, then: "PAK" },
+                            { case: { $in: ["$Location", ["Panama"]] }, then: "PAN" },
+                            { case: { $in: ["$Location", ["Paraguay"]] }, then: "PRY" },
+                            { case: { $in: ["$Location", ["Peru"]] }, then: "PER" },
+                            { case: { $in: ["$Location", ["Manila", "Manilla", "Philippines", "Phillipines"]] }, then: "PHL" },
+                            { case: { $in: ["$Location", ["Poland", "Wrocklaw"]] }, then: "POL" },
+                            { case: { $in: ["$Location", ["Faro", "Estoril", "Portugal"]] }, then: "PRT" },
+                            { case: { $in: ["$Location", ["Puerto Rico"]] }, then: "PRI" },
+                            { case: { $in: ["$Location", ["Reunion Island"]] }, then: "REU" },
+                            { case: { $in: ["$Location", ["Doha", "Qatar"]] }, then: "QAT" },
+                            { case: { $in: ["$Location", ["Romania", "Bucharest", "Constanta"]] }, then: "ROU" },
+                            { case: { $in: ["$Location", ["Moscow", "Russia", "Korolev"]] }, then: "RUS" },
+                            { case: { $in: ["$Location", ["Rwanda"]] }, then: "RWA" },
+                            { case: { $in: ["$Location", ["Samoa"]] }, then: "WSM" },
+                            { case: { $in: ["$Location", ["San Marino"]] }, then: "SMR" },
+                            { case: { $in: ["$Location", ["Senegal"]] }, then: "SEN" },
+                            { case: { $in: ["$Location", ["Serbia", "Belgrade"]] }, then: "SRB" },
+                            { case: { $in: ["$Location", ["Serbia", "SErgia &amp; M", "Serbia &amp; Montenegro"]] }, then: "SCG" },
+                            { case: { $in: ["$Location", ["Singapore"]] }, then: "SGP" },
+                            { case: { $in: ["$Location", ["Presov", "Slovak", "Slovkia", "Portoroz", "Slovakia", "Bratislava","Slovak R", "Slovak Republic"]] }, then: "SVK" },
+                            { case: { $in: ["$Location", ["Slovenia", "Solvenia"]] }, then: "SVN" },
+                            { case: { $in: ["$Location", ["SA", "South", "Pretoria", "Nelspruit", "Polokwane", "South  Africa", "Johannesburg", "South Africa"]] }, then: "ZAF" },
+                            { case: { $in: ["$Location", ["Korea", "South Korea"]] }, then: "KOR" },
+                            { case: { $in: ["$Location", ["Bakio", "Spain", "Melilla", "Barcelona", "Valldoreix", "Palma de Mallorca"]] }, then: "ESP" },
+                            { case: { $in: ["$Location", ["Sri Lanka"]] }, then: "LKA" },
+                            { case: { $in: ["$Location", ["Saudi Arabia"]] }, then: "SAU" },
+                            { case: { $in: ["$Location", ["Sudan"]] }, then: "SDN" },
+                            { case: { $in: ["$Location", ["Soviet Union"]] }, then: "SUN" },
+                            { case: { $in: ["$Location", ["Sweden"]] }, then: "SWE" },
+                            { case: { $in: ["$Location", ["Switz", "Switz.","Neuchatel", "Switzerland"]] }, then: "CHE" }, 
+                            { case: { $in: ["$Location", ["Syria"]] }, then: "SYR" },
+                            { case: { $in: ["$Location", ["Taipei", "Taiwan", "Kaohsiung", "Chinese Ta", "Chinese Taipei"]] }, then: "TWN" },
+                            { case: { $in: ["$Location", ["Tajikistan"]] }, then: "TJK" },
+                            { case: { $in: ["$Location", ["Bangkok", "Thailand"]] }, then: "THA" },
+                            { case: { $in: ["$Location", ["Togo"]] }, then: "TGO" },
+                            { case: { $in: ["$Location", ["TRI"]] }, then: "TTO" },
+                            { case: { $in: ["$Location", ["Tunis", "Tunisia", "Monastir"]] }, then: "TUN" },
+                            { case: { $in: ["$Location", ["Turkey", "Antalya"]] }, then: "TUR" },
+                            { case: { $in: ["$Location", ["Uganda"]] }, then: "UGA" },
+                            { case: { $in: ["$Location", ["Ukraine", "Novaya Kakhovka"]] }, then:        "UKR" },
+                            { case: { $in: ["$Location", ["U.A.E."]] }, then: "ARE" },
+                            { case: { $in: ["$Location", ["UK", "Devon", "Britain", "Great Britain"]] }, then: "GBR" },
+                            { case: { $in: ["$Location", ["OK", "Texas", "U.S.A", "U.S.A.", "United S", "United States", "Delray Beach"]] }, then: "USA" },
+                            { case: { $in: ["$Location", ["Urugay", "Uraguay", "Montevideo", "Uruguay"]] }, then: "URY" },
+                            { case: { $in: ["$Location", ["Uzb.", "Tashkent", "Uzbekistan"]] }, then: "UZB" },
+                            { case: { $in: ["$Location", ["Lara", "Venezuela", "Venezeuela"]] }, then: "VEN" },
+                            { case: { $in: ["$Location", ["Vietnam"]] }, then: "VNM" },
+                            { case: { $in: ["$Location", ["Wales"]] }, then: "GB-WLS" },
+                            { case: { $in: ["$Location", ["Yug.", "Yugoslavia"]] }, then: "YUG" },
+                            { case: { $in: ["$Location", ["Harare", "Zimbabwe"]] }, then: "ZWE" },
+                            { case: { $in: ["$Location", ["TBA", "TBC", "TBD"]] }, then: "GHOST-FLAG" }
+                        ],
+                        default:"$Location"
+                    }
+                }
+            }
+        }
+    ]
+);
+// output: matchedCount = 22236, modifiedCount = 22191
+
+
+// Comando para uniformizar as siglas em Location, o mesmo que foi aplicado nas collections Players e Confrontos 
+
+var tresSiglas = {}
+
+db.codes_siglas.aggregate([
+	{$addFields: 
+		{ioc: 
+			{$cond: 
+				{if: 
+					{ $or: [{ $eq: ["$IOC", null] }, { $eq: ["$IOC", ""] }] },
+					then: "$ISO-ALPHA-3",
+					else: "$IOC"
+				}
+			},
+		fifa: 
+			{$cond: 
+				{if: 
+					{ $or: [{ $eq: ["$FIFA", null] }, { $eq: ["$FIFA", ""] }] },
+					then: "$ISO-ALPHA-3",
+					else: "$FIFA"
+				}
+			}
+		}
+	},
+	{$group: 
+		{
+			_id: "$ISO-ALPHA-3",
+			ioc: { $first: "$ioc" },
+			fifa: { $first: "$fifa" }
+		}
+	}
+]).forEach(function (sigla) {
+	tresSiglas[sigla._id] = [sigla.ioc, sigla.fifa];
+})
+
+var bulkOps = []
+
+db.Season.find().forEach(function (tournament) {
+	if (tournament.Location) { // Verifica se Location não está vazio
+		for (var key in tresSiglas) 
+			{if (tresSiglas[key]) 
+				{if (tournament.Location == key || tresSiglas[key].includes(tournament.Location)) // Verifica se a chave existe no objeto
+					{bulkOps.push(
+						{updateOne: 
+							{
+								filter: { _id: tournament._id },
+								update: { $set: { Location: key } }
+							}
+						});
+					break; // Para de verificar outras chaves, já que se encontrou uma correspondência
+					}
+				}
+			}
+		}
+	}
+)
+
+// Realiza as operações em lote
+
+if (bulkOps.length > 0) {
+	db.Season.bulkWrite(bulkOps);
+}
+// output: matchedCount = 22211, modifiedCount = 6
+
+
+// Comandos para criar a collection Game
+// Comando para inserir na collections Game os jogos nao realizados (campo Released igual a 0)
+
+db.Confrontos.aggregate([
+	{$match: {WL:""}}, 
+	{$project:{
+		Player1: "$PlayerName", 
+		Player2: "$Oponent", 
+		Prize: "$Prize",
+		Tournament: "$Tournament", 
+		Start: "$Start", 
+		End: "$End",
+		Location: "$Location",
+		GameRound: "$GameRound", 
+		Released: {$literal: 0},
+		RankPlayer1: "", 
+		RankPlayer2: "$OponentRank", 
+		Score: "$Score", 
+		Winner: ""
+	}}, 
+	{$merge : "Game"}
+])
+// valores exportados para Game até o momento: 20 (db.Game.countDocuments())
+
+
+// Para o tratamento dos registos duplicados não no sentido literal o pensamento foi, todos que só aparecem como Oponent não precisam de muita formalidade,
+// tal com os os que só aparecem em PlayerName e também, como é obvio os oponent que sao "bye".
+// Neste primeiro comando criou-se a collection com os jogos que respeitam as condiçoes acima e os WL igual a "W" pois assim não existe a possibilidade
+// de incluir os registos "duplicados"
+
+
+var playerName = db.Confrontos.distinct("PlayerName")
+
+var Oponent = db.Confrontos.distinct("Oponent")
+
+db.Confrontos.aggregate([ 
+	{ $match: 
+		{$or: 
+			[
+				{ Oponent: { $nin: playerName } }, 
+				{ PlayerName: { $nin: Oponent } },
+				{ WL: { $eq: "W"} }
+			]
+		}
+	}, 
+	{$project:
+		{ 
+			Player1: "$PlayerName",
+			Player2: "$Oponent",
+			Prize: "$Prize",
+			Tournament: "$Tournament", 
+			Start: "$Start", 
+			End: "$End",
+			Location: "$Location",
+			GameRound: "$GameRound", 
+			RankPlayer1: "", 
+			RankPlayer2: "$OponentRank",
+			Released: {$literal : 1},
+			Score: "$Score", 
+			Winner: 
+				{$cond: 
+					{
+						if: { $eq: ["$WL", "W"] }, 
+						then: "$PlayerName", 
+						else: 
+							{$cond:
+								{ 
+									if: { $eq: ["$WL", "L"] }, 
+									then: "$Oponent", else: "" 
+								} 
+							} 
+					} 
+				} 
+		} 
+	}, 
+	{$merge:"Game"}
+])
+// valores exportados para Game até o momento: 701118 (db.Game.countDocuments())
+
+
+// Em seguida criou-se a variável mapa que fará referência aos dados que indicam que se trata do mesmo jogo 
+
+var gameDuplicatedMap = {}
+
+var key = function(val) {
+	return(val.Player1+val.Player2+val.Tournament+val.Start+val.End+val.Location+val.GameRound)
+}
+
+
+db.Game.aggregate([
+	{ $match: 
+		{$and: 
+			[
+				{ Player1: { $in: Oponent } }, 
+				{ Player2: { $in: playerName } }
+			]
+		}	 
+	}, 
+	{ $group: 
+		{ _id: 
+			{
+				Player1: "$Player1", 
+				Player2: "$Player2", 
+				Tournament: "$Tournament", 
+				Start: "$Start", 
+				End: "$End",
+				Location: "$Location", 
+				GameRound: "$GameRound" 
+			} 
+		} 
+	}
+	]).forEach(function (game) { 
+		gameDuplicatedMap[key(game._id)] = 1; 
+	})
+
+
+// E por fim percorreu-se cada um dos elementos de confronto com um match inverso ao feito na primeira etapa para poder atualizar sempre
+//  que se verificar compatibilidade dos jogos.
+
+
+var bulkOpsUpdate = [];
+
+
+var bulkOpsInsert = [];
+
+
+db.Confrontos.aggregate([ 
+	{ $match: 
+		{
+			$and: 
+			[
+				{ PlayerName: { $in: Oponent } }, 
+				{ Oponent: { $in: playerName } }, 
+				{ WL: { $eq: "L" } }
+			] 
+		} 
+	}, 
+	{ $project: 
+		{_id: 
+			{ 
+				Player1: "$Oponent", 
+				Player2: "$PlayerName", 
+				Tournament: "$Tournament", 
+				Start: "$Start",
+				End: "$End",
+				Location: "$Location",
+				GameRound: "$GameRound" 
+			}, 
+			RankPlayer2: "$OponentRank", 
+			Prize: "$Prize",
+			Location: "$Location", 
+			Score: "$Score",
+		} 
+}]).forEach(function(game){ 
+	if(gameDuplicatedMap[key(game._id)] && game._id.Location == "AUT") // Como o foco é só os jogos realizados na Austria apenas atualizou-se os Ranks dos jogos que ocorreram neste pais
+		{bulkOpsUpdate.push(
+			{updateMany: 
+				{filter: 
+					{$and:
+						[
+							{Player1:{$eq:game._id.Player1}}, 
+							{Player2:{$eq:game._id.Player2}}, 
+							{Tournament:{$eq:game._id.Tournament}}, 
+							{Start:{$eq:game._id.Start}}, 
+							{End:{$eq:game._id.End}},
+							{Location:{$eq:game._id.Location}},
+							{GameRound:{$eq:game._id.GameRound}}
+						]
+					}, 
+				update: {$set:{RankPlayer1:game.RankPlayer2}}
+				}
+			})
+	} 
+	else if (!gameDuplicatedMap[key(game._id)])  
+		{bulkOpsInsert.push(
+			{insertOne:
+				{
+					Player1:game._id.Player2, 
+					Player2:game._id.Player1,
+					Prize: game.Prize,
+					Tournament :game._id.Tournament,
+					RankPlayer1: "",
+					RankPlayer2: game.RankPlayer2,
+					Start: game._id.Start,
+					End: game._id.End,
+					Location: game._id.Location,
+					GameRound: game._id.GameRound,
+					Winner: game._id.Player1,
+					Released: 1,
+					Score: game.Score, Location: game.Location
+				}
+			})
+		}
+	}
+)
+
+
+if (bulkOpsInsert.length > 0) {
+	db.Game.bulkWrite(bulkOpsInsert)
+}
+// valores exportados para Game: 701228 (db.Game.countDocuments())
+
+
+// Funçao para atulizar em batchs as operaçoes de updates guardadas em bulkOpsUpdate
+
+var updateDuplicate = function(bulkOps, n_batch, batch_size) {
+	n = batch_size;
+	p = 0;
+	for (i = 1; i <= n_batch; i++) 
+		{
+			print("Batch: ", i);
+			db.Game.bulkWrite(bulkOps.slice(p, n)); 
+			p = n; 
+			n = (i + 1) * batch_size; 
+		}
+}
+
+updateDuplicate(bulkOpsUpdate, 940, 10) // pois o valor de ações de updates em bulkOpsUpdate é igual a 9400
+
+// Para verificar se foram feitos os updates (atualizando o rank do player1) em Game para os jogos realizados na Austria, faz-se o seguinte comando:
+// db.Game.find({ RankPlayer1: { $nin: ["", "-"] } }).count() 
+// output: 8609

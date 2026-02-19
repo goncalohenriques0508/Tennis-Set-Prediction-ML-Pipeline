@@ -1,0 +1,9 @@
+Name
+LinkPlayer
+Height
+Hand
+Backhand
+Born
+
+
+

@@ -1,0 +1,55 @@
+-- Importação do csv de códigos e países para Country:
+LOAD DATA INFILE 'C:\\data\\atp\\All_Country_code.csv'
+INTO TABLE Country
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS;
+
+-- Importacao do csv Tournaments para Temptournaments:
+LOAD DATA INFILE 'C:\\data\\atp\\Tournaments.csv'
+INTO TABLE TempTournaments
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS; 
+
+-- Importação da do csv de Rounds para a tabela Rounds
+LOAD DATA INFILE 'C:\\data\\atp\\Rounds.csv'
+INTO TABLE round
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS;
+
+-- Importação do csv de Grounds para a tabela Grounds
+LOAD DATA INFILE 'C:\\data\\atp\\Grounds.csv'
+INTO TABLE ground
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS;
+
+-- Importação do csv de Players para a tabela Players
+LOAD DATA INFILE 'C:\\data\\atp\\Players.csv'
+INTO TABLE player
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS;
+
+-- Importação do csv de Season para a tabela tempSeason
+LOAD DATA INFILE 'C:\\data\\atp\\Season.csv'
+INTO TABLE tempSeason
+FIELDS TERMINATED BY ','  
+ENCLOSED BY '"'           
+LINES TERMINATED BY '\n'  
+IGNORE 1 ROWS;
+
+LOAD DATA INFILE 'C:\\data\\atp\\Game.csv'
+INTO TABLE tempgame
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(Player1, Player2, Tournament, Start, End, Prize, GameRound, RankPlayer1, RankPlayer2, Score, Released, Location, Winner);

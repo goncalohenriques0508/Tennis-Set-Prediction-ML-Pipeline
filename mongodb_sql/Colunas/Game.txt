@@ -1,0 +1,13 @@
+Player1
+Player2
+Tournament
+Start
+End
+Prize
+GameRound
+Location
+RankPlayer1
+RankPlayer2
+Score
+Released
+Winner

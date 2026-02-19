@@ -1,0 +1,11 @@
+// Importar a collection atp
+mongoimport --db atpplayers --collection atp --drop --file .\atpplayers.json
+
+// Import da collection all_players
+mongoimport --db atpplayers --collection all_players --type csv --file .\all_players_single.csv --headerline
+
+// Import da collection all_players_hand
+mongoimport --db atpplayers --collection all_players_hand --type csv --file .\all_players_hand.csv --headerline
+
+// Import da collection codes_siglas
+mongoimport --db atpplayers --collection codes_siglas --type csv --file .\codes_siglas.csv --headerline
