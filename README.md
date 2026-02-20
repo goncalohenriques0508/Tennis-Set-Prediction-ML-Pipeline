@@ -1,6 +1,6 @@
 # 🎾 Tennis Set Prediction – ML Pipeline
 
-Projeto aplicado em Ciência de Dados focado na previsão do número total de sets (2 ou 3) em jogos de ténis profissional, através de um pipeline completo de engenharia e modelação de dados.
+Projeto aplicado em Ciência de Dados focado na previsão do número total de sets (2 ou 3) em jogos de ténis profissional, através de um pipeline completo de engenharia e modelação de dados, avaliado em **18 valores**.
 
 O projeto integra múltiplas tecnologias:
 
